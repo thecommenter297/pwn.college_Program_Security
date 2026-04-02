@@ -315,15 +315,22 @@ Giả sử lệnh `syscall` (`0f 05`) bị cấm.
 .section .shellcode,"awx" # Yêu cầu linker cấp quyền Writable+Executable
 .global _start
 _start:
-    lea rdi, [rip+syscall_instruction]
-    mov byte ptr [rdi], 0x0f      ; Ghi byte đầu tiên của syscall
-    mov byte ptr [rdi+1], 0x05    ; Ghi byte thứ hai
+    lea rbx, [rip+syscall_instruction]
+    mov byte ptr [rbx], 0x0f      # Ghi byte đầu tiên của syscall
+    mov byte ptr [rbx+1], 0x05    # Ghi byte thứ hai
     
-    ; ... chuẩn bị các thanh ghi cho execve ...
-    
+    # ... chuẩn bị các thanh ghi cho execve ...
+
+    call rbx # Dùng để gọi syscall
+return:
+        ret
 syscall_instruction:
-    .byte 0x00, 0x00  ; Placeholder, sẽ bị ghi đè
+    .byte 0x00, 0x00  # Placeholder, sẽ bị ghi đè
+custom_string: # Chuỗi tùy ý
+    .string "a_string"
 ```
+
+> P/S: Khi biên dịch có thể có lỗi `... has a LOAD segment with RWX permissions` thì không cần lo lắng, đó chỉ là cảnh báo quyền hạn của Linker khi thấy 1 segment có quyền RWX (Read-Write-Execute).
 
 Khi chạy, đoạn code trên sẽ tự "vá" lại lệnh `syscall` và sau đó thực thi nó.
 
