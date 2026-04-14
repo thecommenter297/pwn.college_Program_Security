@@ -56,6 +56,18 @@ echo "------------------------------------------------"
 echo "[OK] Đã gom toàn bộ vào thư mục: $FOLDER_NAME/"
 ls -l
 echo "------------------------------------------------"
+
+echo "[+] Đang 'vá' (patch) binary để chạy được ở local..."
+# 1. Bảo binary dùng ld.so ở thư mục hiện tại
+patchelf --set-interpreter ./ld.so "./$RAW_NAME"
+
+# 2. Bảo binary tìm libc và libcapstone ở thư mục hiện tại
+patchelf --set-rpath . "./$RAW_NAME"
+
+echo "------------------------------------------------"
+echo "[OK] ĐÃ XONG! Giờ bạn có thể chạy bằng lệnh:"
+echo "     ./$RAW_NAME"
+echo "------------------------------------------------"
 ```
 * Lưu lại và cấp quyền execute:
 ```shell
