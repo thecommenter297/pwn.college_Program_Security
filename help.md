@@ -22,10 +22,15 @@ ssh -i key hacker@dojo.pwn.college
 ```
 
 **Cách tải file từ pwn.college về máy**
-> Dùng lệnh này khi đã ssh đến server
+
 ```shell
-scp -i <đường dẫn đến file key> hacker@dojo.pwn.college:<link_file> .
+scp -i <đường dẫn đến file key ở máy bạn> hacker@dojo.pwn.college:<link_file> .
 ```
+*Ví dụ*:
+```shell
+scp -i key hacker@dojo.pwn.college:/challenge/syscall-shenanigans .
+```
+
 #### Giải nén:
 ```shell
 unzip file.zip
