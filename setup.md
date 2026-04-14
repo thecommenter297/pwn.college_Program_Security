@@ -82,10 +82,3 @@ chmod +x get_pwn.sh
 > ```shell
 > ./get_pwn.sh syscall-shenanigans
 > ```
-
-* Patch file libcapstone.so.5 và libc đã tải về từ pwn.college
-```shell
-patchelf --set-interpreter ./ld-linux-x86-64.so.2 ./<tên-binary>
-
-patchelf --set-rpath '$ORIGIN' ./<tên-binary>
-```
