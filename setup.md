@@ -65,6 +65,7 @@ chmod +x get_pwn.sh
 ```shell
 ./get_pwn.sh <tên_binary_challenge>
 ```
+*Với <tên_binary_challenge> chính là tên file binary trong thư mục /challenge của pwn.college*
 > Ví dụ:
 > ```shell
 > ./get_pwn.sh syscall-shenanigans
