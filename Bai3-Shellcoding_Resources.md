@@ -436,7 +436,7 @@ syscall
 <details>
 <summary>Nhấn vào đây để xem chi tiết về kỹ thuật Symlink trong Pwnable</summary>
 
-### E. Kỹ Thuật Symlink: Từ "Lối Tắt" Tới Vũ Khí Tấn Công
+### Kỹ Thuật Symlink: Từ "Lối Tắt" Tới Vũ Khí Tấn Công
 
 Trong thế giới Linux, **Symbolic Link (Symlink)** hay **Soft Link** không đơn thuần là một "shortcut" như trên Windows. Đối với một Pwner, nó là một công cụ mạnh mẽ để điều khiển và lừa dối cách hệ điều hành phân giải đường dẫn tệp tin (File Path Resolution), từ đó mở ra nhiều hướng tấn công sáng tạo.
 
