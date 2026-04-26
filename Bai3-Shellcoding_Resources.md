@@ -433,11 +433,6 @@ syscall
 
 > **💡 Bài học rút ra:** Shellcode bản chất là ra lệnh cho CPU, CPU không quan tâm tên file là gì. Khi không gian quá hẹp, hãy dùng các lệnh của Hệ điều hành (tạo file, bash script, symlink) để làm "vùng đệm" thay cho shellcode.
 
-***
-
-Đoạn trên được viết bằng ngôn ngữ Markdown và dùng chung format (có code block, in đậm, giải thích ngắn gọn) giống hệt với các phần A, B, C trong file tài liệu của bạn. Chúc bạn hoàn thiện file cheatsheet thật xịn xò nhé!
-
-
 ### E. Shellcode Bị Biến Đổi (Shellcode Mangling)
 
 Trong một số kịch bản CTF hoặc thực tế, input của bạn có thể bị chương trình mục tiêu xử lý trước khi thực thi.
