@@ -434,6 +434,9 @@ syscall
 > **💡 Bài học rút ra:** Shellcode bản chất là ra lệnh cho CPU, CPU không quan tâm tên file là gì. Khi không gian quá hẹp, hãy dùng các lệnh của Hệ điều hành (tạo file, bash script, symlink) để làm "vùng đệm" thay cho shellcode.
 
 <details>
+
+---
+
 <summary>Nhấn vào đây để xem chi tiết về kỹ thuật Symlink trong Pwnable</summary>
 
 ### Kỹ Thuật Symlink: Từ "Lối Tắt" Tới Vũ Khí Tấn Công
@@ -509,6 +512,8 @@ Hard Link là một khái niệm "anh em" nhưng hoạt động hoàn toàn khá
 3.  **Time-of-Use:** Chương trình `root` bây giờ mới thực hiện ghi vào file, nhưng thực chất nó đang ghi vào `/etc/shadow`, cho phép hacker thay đổi mật khẩu của `root`.
 
 > **💡 Kết luận:** Đừng bao giờ coi Symlink là một tính năng đơn giản. Trong tay một Pwner, nó là công cụ để bẻ cong logic của hệ thống file, vượt qua các cơ chế an ninh và là chìa khóa để giải quyết những bài toán hóc búa nhất.
+
+---
 
 </details>
 
