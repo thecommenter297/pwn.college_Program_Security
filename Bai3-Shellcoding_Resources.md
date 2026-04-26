@@ -435,9 +435,9 @@ syscall
 
 <details>
 
----
-
 <summary>Nhấn vào đây để xem chi tiết về kỹ thuật Symlink trong Pwnable</summary>
+
+---
 
 ### Kỹ Thuật Symlink: Từ "Lối Tắt" Tới Vũ Khí Tấn Công
 
