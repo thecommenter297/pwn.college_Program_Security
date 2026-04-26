@@ -433,6 +433,85 @@ syscall
 
 > **💡 Bài học rút ra:** Shellcode bản chất là ra lệnh cho CPU, CPU không quan tâm tên file là gì. Khi không gian quá hẹp, hãy dùng các lệnh của Hệ điều hành (tạo file, bash script, symlink) để làm "vùng đệm" thay cho shellcode.
 
+<details>
+<summary>Nhấn vào đây để xem chi tiết về kỹ thuật Symlink trong Pwnable</summary>
+
+### E. Kỹ Thuật Symlink: Từ "Lối Tắt" Tới Vũ Khí Tấn Công
+
+Trong thế giới Linux, **Symbolic Link (Symlink)** hay **Soft Link** không đơn thuần là một "shortcut" như trên Windows. Đối với một Pwner, nó là một công cụ mạnh mẽ để điều khiển và lừa dối cách hệ điều hành phân giải đường dẫn tệp tin (File Path Resolution), từ đó mở ra nhiều hướng tấn công sáng tạo.
+
+#### 1. Cú Pháp và Bản Chất
+Symlink là một loại tệp tin đặc biệt, nội dung của nó chỉ là một chuỗi ký tự chứa đường dẫn trỏ tới một tệp tin hoặc thư mục khác.
+
+**Lệnh tạo:**
+```bash
+# Cú pháp: ln -s [Đường_dẫn_đích] [Tên_symlink]
+ln -s /flag f
+```
+
+Khi bạn thực hiện một thao tác (ví dụ `cat`, `chmod`, `open`) trên file `f`, Kernel của Linux sẽ tự động "đi theo" (follow) đường dẫn đó và thực hiện thao tác trên file đích là `/flag`.
+
+```bash
+$ ls -l
+# Chữ 'l' ở đầu cho biết đây là một symlink
+# Phần 'f -> /flag' chỉ rõ link này đang trỏ đi đâu
+lrwxrwxrwx 1 hacker hacker 5 Apr 26 12:00 f -> /flag
+```
+
+Đây chính là chìa khóa giúp chúng ta "rút gọn" tên file `/flag` thành `f` (1 byte) trong các bài shellcode bị giới hạn kích thước.
+
+#### 2. "Gotchas" - Những Cạm Bẫy Cần Chú Ý
+Sự khác biệt giữa đường dẫn tuyệt đối và tương đối là cực kỳ quan trọng khi dùng Symlink.
+
+*   **Đường dẫn tuyệt đối (Absolute Path):** Bắt đầu từ thư mục gốc `/`. Luôn trỏ đúng đến một vị trí duy nhất, bất kể bạn di chuyển symlink đi đâu.
+    ```bash
+    # Link này sẽ luôn trỏ tới /flag, dù bạn có copy file 'f' đi đâu chăng nữa
+    ln -s /flag f 
+    ```
+    **=> Ưu tiên sử dụng trong Pwnable vì tính ổn định cao.**
+
+*   **Đường dẫn tương đối (Relative Path):** Không bắt đầu từ `/`. Đường dẫn được tính toán dựa trên vị trí hiện tại của chính symlink đó.
+    ```bash
+    # Giả sử flag nằm cùng thư mục, ta tạo link
+    ln -s flag f
+
+    # Nếu ta di chuyển symlink 'f' sang thư mục /tmp
+    mv f /tmp/
+    
+    # Link sẽ bị hỏng (dangling) vì nó sẽ cố tìm file 'flag' bên trong /tmp
+    cat /tmp/f 
+    # cat: /tmp/f: No such file or directory
+    ```
+
+#### 3. So Sánh Symlink (Soft Link) và Hard Link
+Hard Link là một khái niệm "anh em" nhưng hoạt động hoàn toàn khác. Hiểu rõ sự khác biệt sẽ giúp bạn chọn đúng công cụ cho từng tình huống.
+
+| Tiêu chí | Symbolic Link (Soft Link) | Hard Link |
+| :--- | :--- | :--- |
+| **Bản chất** | Một file riêng biệt, chứa đường dẫn tới file đích. Giống "tờ giấy ghi địa chỉ". | Một cái tên khác cho cùng một khối dữ liệu trên ổ cứng. |
+| **Lệnh tạo** | `ln -s target link` | `ln target link` |
+| **Inode** | Có Inode **khác** với file gốc. | Có Inode **giống hệt** file gốc. |
+| **Xóa file gốc** | Link sẽ bị hỏng (dangling). | Link vẫn hoạt động bình thường, dữ liệu chỉ bị xóa khi mọi hard link trỏ tới nó bị xóa hết. |
+| **Áp dụng cho thư mục?** | **Có.** | **Không** (trừ một số trường hợp đặc biệt do Superuser). |
+| **Xuyên hệ thống file?**| **Có** (Có thể link từ ổ `/` sang ổ `/home`). | **Không** (Phải nằm trên cùng một filesystem/partition). |
+
+#### 4. Nâng Cao: Biến Symlink Thành Vũ Khí Tấn Công
+
+**a. Path Traversal (Vượt rào đường dẫn):**
+Đây là kịch bản tấn công phổ biến. Giả sử một chương trình web chỉ cho phép bạn đọc file trong thư mục `/var/www/uploads/`.
+*   **Mục tiêu:** Đọc file `/etc/passwd`.
+*   **Khai thác:** Hacker upload một file, sau đó tìm cách tạo một symlink `ln -s /etc/passwd /var/www/uploads/avatar.jpg`. Khi chương trình cố gắng hiển thị `avatar.jpg`, thực chất nó sẽ đọc và hiển thị nội dung của `/etc/passwd`.
+
+**b. Race Condition (TOCTOU - Time-of-Check to Time-of-Use):**
+Đây là một kỹ thuật tấn công đỉnh cao, thường xảy ra trong các thư mục mà nhiều người dùng có quyền ghi (như `/tmp`).
+1.  **Time-of-Check:** Một chương trình chạy quyền `root` kiểm tra xem file `/tmp/lockfile` có an toàn không (ví dụ, quyền sở hữu thuộc về `root`).
+2.  **The Race:** Ngay sau khi chương trình kiểm tra xong, hacker cực nhanh tay xóa `/tmp/lockfile` và thay thế nó bằng một symlink: `ln -s /etc/shadow /tmp/lockfile`.
+3.  **Time-of-Use:** Chương trình `root` bây giờ mới thực hiện ghi vào file, nhưng thực chất nó đang ghi vào `/etc/shadow`, cho phép hacker thay đổi mật khẩu của `root`.
+
+> **💡 Kết luận:** Đừng bao giờ coi Symlink là một tính năng đơn giản. Trong tay một Pwner, nó là công cụ để bẻ cong logic của hệ thống file, vượt qua các cơ chế an ninh và là chìa khóa để giải quyết những bài toán hóc búa nhất.
+
+</details>
+
 ### E. Shellcode Bị Biến Đổi (Shellcode Mangling)
 
 Trong một số kịch bản CTF hoặc thực tế, input của bạn có thể bị chương trình mục tiêu xử lý trước khi thực thi.
