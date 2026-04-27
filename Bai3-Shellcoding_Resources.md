@@ -605,7 +605,7 @@ _start:
     jmp offset_safe
 
     # Dùng .org để ép trình biên dịch đặt code tại vị trí mong muốn
-    .org 0x1100
+    .org 0x1100 # Hoặc có thể tùy biến thành `.org <label> + offset`, ví dụ .org _start + 10
     
 offset_safe:
     # Bắt đầu viết đoạn shellcode của bạn
