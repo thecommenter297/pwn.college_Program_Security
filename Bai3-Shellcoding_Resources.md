@@ -238,7 +238,7 @@ Giả sử byte `/` (`0x2f`) bị cấm, nhưng bạn cần chuỗi `"/bin/sh"`.
 
 *   **Dùng XOR Encoding:** Mã hóa chuỗi của bạn bằng một khóa (key) nào đó, sau đó viết một đoạn shellcode nhỏ để giải mã nó ngay trong bộ nhớ trước khi sử dụng.
 
-    ```asm!
+    ```asm
     ; Giả sử chuỗi "/bin/sh" đã được XOR với key 0x41 ('A')
     ; và lưu vào vùng data: encrypted_str db 0x6e, 0x23, 0x28, 0x2f, 0x6e, 0x32, 0x29
     
@@ -366,7 +366,9 @@ Khi các ràng buộc về kích thước hoặc ký tự cấm quá khắc nghi
     Payload này sẽ đọc Stage 2 từ `stdin` và ghi đè lên chính nó, sau đó CPU sẽ tiếp tục thực thi Stage 2.
 
     > **Lưu ý**: Có thể sẽ có tình huống mà chương trình không cho phép nhận input đủ dài để cài đặt các thanh ghi như ý. Lúc đó ta sẽ cần dùng GDB để debug chương trình, xem chương trình gọi shellcode ở đoạn nào, ngay khi nhảy đến vùng để thực thi shellcode thì các thanh ghi của chương trình là gì. Từ đó tận dụng giá trị sẵn có của registers, thực hiện shellcode giai đoạn 1.
-
+    
+    **Mẹo để xác định vùng nhớ chứa shellcode**: Khi chạy GDB, ta có thể thử nhập shellcode là các chuỗi dễ nhận biết như `AaaaBbbBbCCccccCcDddd...` để dễ dàng xác định được **vùng nhớ nào đang là vùng nhớ chứa shellcode**. Từ đó ta có thể tính toán để cài đặt các thanh ghi trỏ về vùng nhớ phù hợp.
+    
 *   **Stage 2 (Final Payload):** Shellcode hoàn chỉnh, không bị ràng buộc, thực hiện mục tiêu cuối cùng (gọi shell, đọc flag...).
 
     Dưới đây là đoạn code python mẫu để thực hiện kỹ thuật **Multi-Stage Shellcode**:
