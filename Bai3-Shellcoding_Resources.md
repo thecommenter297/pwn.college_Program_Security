@@ -369,45 +369,45 @@ Khi các ràng buộc về kích thước hoặc ký tự cấm quá khắc nghi
 
 *   **Stage 2 (Final Payload):** Shellcode hoàn chỉnh, không bị ràng buộc, thực hiện mục tiêu cuối cùng (gọi shell, đọc flag...).
 
-Dưới đây là đoạn code python mẫu để thực hiện kỹ thuật **Multi-Stage Shellcode**:
-
-**sender.py**
-```python
-from pwn import *
-
-context.arch = 'amd64'
-p = process('./program')
-
-# ==========================================
-# GIAI ĐOẠN 1:
-# ==========================================
-stage1 = asm("""
+    Dưới đây là đoạn code python mẫu để thực hiện kỹ thuật **Multi-Stage Shellcode**:
     
-    """)
-
-log.info(f"Gui Stage 1: {stage1.hex()}")
-p.send(stage1)
-
-# Tạm dừng 
-sleep(0.5)
-
-# ==========================================
-# GIAI ĐOẠN 2:
-# ==========================================
-
-# Đệm byte NOP vào để làm padding nếu cần.
-padding = asm("nop") * 1
-
-real_shellcode = asm("""
+    **sender.py**
+    ```python
+    from pwn import *
     
-    """)
-
-stage2 = padding + real_shellcode
-log.info(f"Gui Stage 2 ({len(stage2)} bytes)...")
-p.send(stage2)
-
-p.interactive()
-```
+    context.arch = 'amd64'
+    p = process('./program')
+    
+    # ==========================================
+    # GIAI ĐOẠN 1:
+    # ==========================================
+    stage1 = asm("""
+        
+        """)
+    
+    log.info(f"Gui Stage 1: {stage1.hex()}")
+    p.send(stage1)
+    
+    # Tạm dừng 
+    sleep(0.5)
+    
+    # ==========================================
+    # GIAI ĐOẠN 2:
+    # ==========================================
+    
+    # Đệm byte NOP vào để làm padding nếu cần.
+    padding = asm("nop") * 1
+    
+    real_shellcode = asm("""
+        
+        """)
+    
+    stage2 = padding + real_shellcode
+    log.info(f"Gui Stage 2 ({len(stage2)} bytes)...")
+    p.send(stage2)
+    
+    p.interactive()
+    ```
 
 ### D. Tận Dụng Môi Trường Hệ Thống (Environment Preparation & Shellcode Golfing)
 
