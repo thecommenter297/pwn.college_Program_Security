@@ -357,7 +357,7 @@ Khi các ràng buộc về kích thước hoặc ký tự cấm quá khắc nghi
     # syscall read(0, rip, 1000)
     xor rax, rax            
     xor rdi, rdi            
-    lea rsi, [rip]          
+    lea rsi, [rip]  # Hoặc có thể két hợp các lệnh push, pop để set giá trị cho rsi        
     mov rdx, 1000           
     syscall                 
     
