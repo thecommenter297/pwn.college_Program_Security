@@ -461,6 +461,32 @@ log.info(f"Leaked Address (RIP): {hex(leak)}")
 
 **Tips and Tricks:** Khi đọc code, hãy luôn đặt câu hỏi: *"Điều kiện này có thể bị sai không? Nếu tôi là CPU, tôi có thể bỏ qua lệnh này không?"*. 
 
+### 4. CHIẾN THUẬT PHỐI HỢP (OOB là công cụ hỗ trợ)
+*Đây là những kỹ thuật bao quát. OOB chỉ là một trong nhiều con đường dẫn đến các mục tiêu này.*
+
+#### 1. Rò rỉ thông tin (Information Leak) - Phá bỏ "Mù lòa"
+*   **Mục tiêu:** Bypass ASLR, PIE, Stack Canary.
+*   **Vai trò của OOB:** OOB Read là con đường ngắn nhất để đạt được Leak. 
+*   **Nhánh thay thế:** Nếu không có OOB Read, pwner có thể dùng lỗi *Format String* hoặc *Use-After-Free* để đạt mục tiêu tương tự.
+
+#### 2. Điều khiển luồng thực thi (Control Flow Hijack)
+*   **Mục tiêu:** Chiếm quyền điều khiển `RIP`.
+*   **Vai trò của OOB:** Dùng OOB Write để đè `Return Address` (trên Stack) hoặc `GOT Entry`/`vtable` (trên Heap/Global).
+*   **Nhánh thay thế:** Có thể dùng lỗi *Type Confusion* hoặc *Double Free* để ghi đè các con trỏ hàm này.
+
+#### 3. Sắp đặt trận địa bộ nhớ (Memory Orchestration)
+Đây là nơi phân biệt giữa Stack (Dễ) và Heap (Khó):
+
+*   **Trên Stack (Fixed Layout):** Trận địa đã được trình biên dịch dàn quân sẵn. OOB chỉ việc "càn quét" theo đường thẳng. Skill cần: Tính toán `padding` và `offset`.
+*   **Trên Heap (Dynamic Layout - HEAP FENG SHUI):** 
+    *   **Mục tiêu:** Ép bộ nhớ phải đặt một "Đối tượng nhạy cảm" (mục tiêu) nằm ngay cạnh "Buffer lỗi" (vũ khí).
+    *   **Vai trò của OOB:** OOB là kẻ thực hiện cú đấm cuối cùng sau khi Feng Shui đã dàn trận xong.
+    *   **Bản chất Feng Shui:** Là một skill độc lập, bao quát. Bạn dùng các lệnh `malloc/free` để tạo ra các lỗ hổng (holes) và lấp đầy chúng, nhằm kiểm soát cấu trúc Heap. Không có OOB bạn vẫn phải học Feng Shui để phục vụ UAF hay Double Free.
+
+#### 4. Leo thang năng lực (Primitive Escalation)
+*   **Mục tiêu:** Từ một lỗi OOB "yếu" (ví dụ chỉ ghi được 1 byte Null) trở thành một lỗi OOB "mạnh" (ghi được toàn bộ bộ nhớ).
+*   **Vai trò của OOB:** OOB 1-byte ghi đè vào biến `length` của một Object khác, biến Object đó thành một "vũ khí OOB" thứ hai mạnh hơn.
+
 ---
 
 ### 2. Sự Trộn Lẫn Chết Người Giữa Dữ Liệu và Luồng Điều Khiển
