@@ -20,8 +20,6 @@ Bước ngoặt thực sự đến vào năm 1972, khi **Dennis Ritchie tại Be
 
 Điểm mấu chốt nằm ở vế thứ hai. C được thiết kế để **ánh xạ gần như trực tiếp xuống Assembly**, không có những tầng trừu tượng hay cơ chế an toàn "bất ngờ" nào khi chạy. Điều này mang lại hiệu năng vô song, nhưng cũng chính là nơi "quyền năng tối thượng" gặp "hiểm họa khôn lường". Triết lý thiết kế này trao toàn bộ trách nhiệm quản lý bộ nhớ cho lập trình viên, và bất kỳ sai sót nào cũng sẽ trở thành một cánh cửa cho kẻ tấn công.
 
-</details>
-
 ### 2. Di Sản Không An Toàn: Tại Sao Lỗi Bộ Nhớ Vẫn Tồn Tại?
 
 Dù thế giới công nghệ đã đi một chặng đường dài, di sản của C vẫn còn hiện hữu sâu sắc. Hãy nhìn vào dòng thời gian đơn giản hóa này:
@@ -42,6 +40,8 @@ Ngay từ năm 1968, trong một bài báo đặt nền móng cho việc cách l
 > *"Điều gì sẽ xảy ra nếu một chương trình cho phép ai đó ghi đè lên vùng nhớ mà họ không được phép?"*
 
 Ngày nay, đây không còn là một câu hỏi giả định. Đối với một nhà nghiên cứu bảo mật hay một hacker, đây chính là **cơ hội**. Câu trả lời cho câu hỏi đó là: "Bạn có thể chiếm quyền điều khiển chương trình đó." Lỗi ghi đè bộ nhớ (Memory Corruption) là gốc rễ của phần lớn các cuộc tấn công khai thác lỗ hổng phần mềm nghiêm trọng nhất.
+
+</details>
 
 ---
 
