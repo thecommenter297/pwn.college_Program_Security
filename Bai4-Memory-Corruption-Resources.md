@@ -327,7 +327,7 @@ io.interactive()
 
 ---
 
-### Bounds Check Elimination
+### 3. Bounds Check Elimination
 
 #### Missing Lower Bound (Quên kiểm tra biên dưới)
 
