@@ -4,6 +4,11 @@
 
 ## Phần 1: Lỗi Bộ Nhớ - Nền Tảng Của Mọi Cuộc Tấn Công
 
+> Cái đoạn lịch sử này lướt qua cũng được
+
+<details>
+    <summary>Lịch sử</summary>
+
 ### 1. Từ Mã Máy đến "Sức Mạnh Đi Kèm Trách Nhiệm Lớn"
 
 Lịch sử của ngành khoa học máy tính là một chuỗi nỗ lực không ngừng để giao tiếp với máy móc một cách hiệu quả hơn. Ban đầu, các lập trình viên phải "nói chuyện" trực tiếp với CPU bằng **mã máy (machine code)**. Đến năm 1952, Grace Hopper đã đặt nền móng cho các **trình biên dịch (compiler)**, một cuộc cách mạng giúp con người viết mã bằng ngôn ngữ gần gũi hơn. Tuy nhiên, các trình biên dịch đời đầu tạo ra mã kém hiệu quả và bản thân máy tính cũng rất chậm chạp.
@@ -14,6 +19,8 @@ Bước ngoặt thực sự đến vào năm 1972, khi **Dennis Ritchie tại Be
 2.  **Kiểm soát cấp thấp (Low-level Control):** Cung cấp cho lập trình viên quyền truy cập và thao tác trực tiếp với bộ nhớ, thanh ghi, và các tài nguyên hệ thống.
 
 Điểm mấu chốt nằm ở vế thứ hai. C được thiết kế để **ánh xạ gần như trực tiếp xuống Assembly**, không có những tầng trừu tượng hay cơ chế an toàn "bất ngờ" nào khi chạy. Điều này mang lại hiệu năng vô song, nhưng cũng chính là nơi "quyền năng tối thượng" gặp "hiểm họa khôn lường". Triết lý thiết kế này trao toàn bộ trách nhiệm quản lý bộ nhớ cho lập trình viên, và bất kỳ sai sót nào cũng sẽ trở thành một cánh cửa cho kẻ tấn công.
+
+</details>
 
 ### 2. Di Sản Không An Toàn: Tại Sao Lỗi Bộ Nhớ Vẫn Tồn Tại?
 
