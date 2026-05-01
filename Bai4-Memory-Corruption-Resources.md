@@ -151,7 +151,7 @@ Lệnh **`ret`** ở cuối mỗi hàm thực chất là lệnh lấy giá trị
 ### 4.2. Các phương pháp "Lách" qua Stack Canary
 1. **Leak Canary:** Dùng Info Leak để lấy giá trị. Trong payload overflow, chỉ việc chèn lại đúng giá trị đó vào vị trí cũ rồi tiếp tục đè `RIP`.
 2. **Byte-by-Byte Brute-Force:** Trong các server dùng `fork()`, tiến trình con thừa kế nguyên vẹn Canary từ cha. Đè sai 1 byte, con crash nhưng cha vẫn sống và đẻ ra con mới. Ta có thể brute-force từng byte một (mất tối đa 1792 lần thử trên x64).
-3. **Nhảy cóc (Jumping Canary):** Nếu lỗi là vòng lặp OOB bằng index, ta có thể sửa biến index để nhảy qua vùng nhớ Canary, đè thẳng vào `Return Address` mà không chạm vào sợi lông nào của "chim báo bão".
+3. **Nhảy cóc (Jumping Canary):** Nếu lỗi là vòng lặp OOB bằng index, ta có thể sửa biến index để nhảy qua vùng nhớ Canary, đè thẳng vào `Return Address` mà không chạm vào canary.
 
 ### 4.3. Kỹ nghệ Exploit (Exploit Engineering)
 * **Cyclic Values (Mẫu chuỗi De Bruijn):** Thay vì gửi chuỗi `AAAA`, hãy gửi chuỗi tuần hoàn (`aaaaabaaacaaa...`). Khi GDB báo lỗi tại giá trị đặc biệt, ta tra ngược chuỗi để biết chính xác offset đè `RIP` đến từng byte.
