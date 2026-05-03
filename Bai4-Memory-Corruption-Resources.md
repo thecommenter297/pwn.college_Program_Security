@@ -70,11 +70,23 @@ Những lỗ hổng này rất tinh vi, biến một code nhìn bề ngoài an t
 #### A. Signedness Bug (Lỗi nhầm lẫn Dấu)
 Xảy ra khi dùng số có dấu (`int`) để kiểm tra biên, nhưng lại dùng làm số không dấu (`size_t`) khi thao tác.
 ```c
-int size;
+int size; // Số có dấu (32-bit)
+
 scanf("%d", &size);
+
 if (size > 32) return; // Kẻ tấn công nhập -1 để lách điều kiện này
-read(0, buffer, size); // read nhận size_t. -1 bị ép kiểu thành 0xffffffffffffffff -> Buffer Overflow!
+
+read(0, buffer, size); // read nhận size_t. -1 bị ép kiểu thành 0xffffffffffffffff
 ```
+
+Mấu chốt của vấn đề là biến `size` được khai báo như kiểu `int`, nhưng hàm `read()` mong đợi kiểu `size_t` - số không dấu. Vậy, khi hàm `read()` sử dụng biến `size` sẽ ép nó về kiểu số không dấu (`0xfffff...`) theo quy tắc **Số bù hai (Two's Compliment)**
+
+> Để biết cụ thể một hàm mong đợi kiểu dữ liệu gì, hãy google bằng cách gõ `man + <tên hàm>`
+
+**Chú ý:** Độ lớn của `size_t` không cố định
+* Trên hệ điều hành 32-bit: size_t thường dài 4 byte (giống như unsigned int).
+* Trên hệ điều hành 64-bit: size_t dài 8 byte (giống như unsigned long long).
+* `size_t` được thiết kế để có thể chứa được kích thước lớn nhất của một mảng mà bộ nhớ máy tính đó có thể cấp phát được.
 
 #### B. Integer Overflow (Tràn số nguyên)
 Xảy ra khi một phép tính vượt quá giới hạn và "quay vòng" về giá trị nhỏ.
