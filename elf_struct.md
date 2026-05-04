@@ -1392,4 +1392,4 @@ Rela, có một addend, Rel thì không.
 
 -   `/usr/include/elf.h`
 
--   Trang man `ELF(5)`
+-   Man page `ELF(5)`
