@@ -26,17 +26,9 @@ Năm 1968, Robert Graham từng đặt câu hỏi: *"Điều gì sẽ xảy ra n
 
 Trước khi khai thác, ta cần hiểu điều gì đã tạo ra lỗ hổng. Dưới đây là các tác nhân cốt lõi gây ra Memory Corruption.
 
-### 2.1. Classic Buffer Overflow & Kích Thước Ảo Ảnh
-Lỗi cơ bản nhất xuất phát từ việc C không tự động theo dõi kích thước mảng.
-```c
-char small_buffer[16];
-read(0, small_buffer, 128); // read() không hề biết mảng chỉ chứa được 16 bytes
-```
-Tuy nhiên, trên kiến trúc x64, mọi thứ không chỉ là đếm byte. Do yêu cầu **Data Alignment (Căn chỉnh dữ liệu)**, trình biên dịch thường thêm các byte đệm (padding) vào giữa các biến. Một lỗi overflow nhỏ (vài byte) có thể không chạm tới `Return Address`, nhưng nó âm thầm đè vào padding và tràn sang các biến cục bộ liền kề (VD: cờ boolean phân quyền `isAdmin`). Kiểm soát các biến này bằng một overflow "nửa vời" là chìa khóa leo thang đặc quyền mà không làm crash chương trình.
-
 ---
 
-### 2.2. Sự Tin Tưởng Mù Quáng (Vấn Đề Truy Cập Vượt Biên - Out-of-Bounds)
+### 2.1. Sự Tin Tưởng Mù Quáng (Vấn Đề Truy Cập Vượt Biên - Out-of-Bounds)
 
 #### OOB READ (Rò Rỉ Thông Tin - Info Leak)
 OOB Read là tiền đề của mọi cuộc tấn công hiện đại để vượt mặt không gian bộ nhớ ngẫu nhiên (ASLR).
@@ -63,7 +55,7 @@ user1.id_list[index] = new_id;
 
 ---
 
-### 2.3. Lỗi Toán Học (Arithmetic Primitives)
+### 2.2. Lỗi Toán Học (Arithmetic Primitives)
 
 Những lỗ hổng này rất tinh vi, biến một code nhìn bề ngoài an toàn thành thảm họa.
 
@@ -108,7 +100,7 @@ if (small_size < 100) memcpy(buf, "A", big_size); // Bị lách kiểm tra, copy
 
 ---
 
-### 2.4. Khắc Tinh Của Việc Kiểm Tra Biên (Bounds Check Elimination)
+### 2.3. Khắc Tinh Của Việc Kiểm Tra Biên (Bounds Check Elimination)
 
 | Loại lỗi | Đặc điểm & Cơ chế |
 | :--- | :--- |
@@ -121,9 +113,18 @@ if (small_size < 100) memcpy(buf, "A", big_size); // Bị lách kiểm tra, copy
 
 ## Phần 3: Nghệ Thuật Khai Thác Trên Ngăn Xếp (Smashing the Stack)
 
+### 3.1. Classic Buffer Overflow
+Lỗi cơ bản nhất xuất phát từ việc C không tự động theo dõi kích thước mảng.
+```c
+char small_buffer[16];
+read(0, small_buffer, 128); // read() không hề biết mảng chỉ chứa được 16 bytes
+```
+
+---
+
 Khi đã có khả năng ghi đè bộ nhớ, mục tiêu kinh điển nhất luôn là **Ngăn Xếp (Stack)** - nơi trộn lẫn giữa Dữ liệu (Data) và Luồng điều khiển (Control Flow).
 
-### 3.1. Phân tích hiện trường: Stack x64 & Nút thắt `RIP`
+### 3.2. Phân tích hiện trường: Stack x64 & Nút thắt `RIP`
 Trên x64 Linux, Stack phát triển về phía **địa chỉ thấp**, nhưng các hàm ghi bộ nhớ (`read`, `gets`) lại ghi từ dưới lên **địa chỉ cao**. Mọi dữ liệu bị tràn sẽ tiến thẳng tới các cấu trúc điều khiển.
 
 ```text
@@ -143,7 +144,9 @@ Trên x64 Linux, Stack phát triển về phía **địa chỉ thấp**, nhưng 
 Lệnh **`ret`** ở cuối mỗi hàm thực chất là lệnh lấy giá trị tại `Return Address` đưa vào thanh ghi `RIP`. Bằng cách tràn buffer và ghi đè giá trị này, chuỗi lệnh `ret` trở thành bệ phóng đưa CPU chạy theo hướng ta muốn.
 **Payload kinh điển:** `[Junk Data lấp đầy Buffer] +[8 bytes rác đè Saved RBP] + [Địa chỉ Target đè Return Address]`
 
-### 3.2. Các cấp độ thao túng lệnh `ret`
+Tuy nhiên, trên kiến trúc x64, mọi thứ không chỉ là đếm byte. Do yêu cầu **Data Alignment (Căn chỉnh dữ liệu)**, trình biên dịch thường thêm các byte đệm (padding) vào giữa các biến. Một lỗi overflow nhỏ (vài byte) có thể không chạm tới `Return Address`, nhưng nó âm thầm đè vào padding và tràn sang các biến cục bộ liền kề (VD: cờ boolean phân quyền `isAdmin`). Kiểm soát các biến này bằng một overflow "nửa vời" là chìa khóa leo thang đặc quyền mà không làm crash chương trình.
+
+### 3.3. Các cấp độ thao túng lệnh `ret`
 1. **Ret2Win:** Nếu chương trình có sẵn hàm "tặng điểm" (VD: `system("/bin/sh")`), ta chỉ cần đè Return Address trỏ về đó.
 2. **Ret2Shellcode:** Nếu Stack có quyền Thực thi (thiếu bảo vệ NX), ta chèn mã máy (Shellcode) vào Buffer, rồi đè Return Address trỏ ngược lại đúng địa chỉ của Buffer.
 3. **ROP (Return-Oriented Programming):** Khi Stack bị khóa quyền thực thi (NX enabled), ta tìm các mẩu code có sẵn trong bộ nhớ (Gadget kết thúc bằng `ret`) và xâu chuỗi chúng lại trên Stack để gọi các hàm hệ thống.
