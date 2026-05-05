@@ -198,17 +198,65 @@ Dưới đây là cấu trúc của file ELF
 
 <img width="680" height="1135" alt="image" src="https://github.com/user-attachments/assets/a5edacfa-de32-4c51-9a51-63389f46c166" />
 
+<br>
+<br>
+
+> Chi tiết hơn về cấu trúc của file **ELF** bạn có thể xem ở bài viết <a href="https://gist.github.com/x0nu11byt3/bcb35c3de461e5fb66173071a2379779">này</a>.
+> 
+> Hoặc bản dịch tiếng Việt có chỉnh sửa của AI ở <a href="https://github.com/thecommenter297/pwn.college_Program_Security/blob/main/elf_struct.md">đây</a>
+
+**Note**: Trong phạm vi bài viết này, chúng ta sẽ chủ yếu chỉ nói về PLT (Procedure Linkage Table) và GOT (Global Offset Table) nằm trong phần **Sections**
+
 ### A. Bảng PLT (Procedure Linkage Table)
 *   **Bản chất:** Là một phân vùng chứa **Mã lệnh (Code)**. Nó nằm trong vùng nhớ `.plt` và có quyền **Thực thi (Executable)**.
 *   **Chức năng:** Đóng vai trò là các "Trampoline" (Bàn đạp). File thực thi sẽ không gọi thẳng vào `libc`, mà gọi vào các đoạn code nhỏ trong PLT.
 *   **Nó trông như thế nào?** Nó là một mảng các đoạn Assembly ngắn, mỗi đoạn tương ứng với một hàm (ví dụ: `puts@plt`, `printf@plt`).
 
+*Hình minh họa cho PLT*
+<img width="638" height="795" alt="image" src="https://github.com/user-attachments/assets/92ad1ec9-be1e-4618-8889-fa27d873c957" />
+
+Bảng PLT được chia thành các phần (entries), mỗi phần có một nhiệm vụ riêng biệt:
+
+**PLT[0]: Common Resolver (Phần tử gốc/Magic)**
+
+* Đây là đoạn mã đặc biệt dùng chung cho toàn bộ các hàm trong bảng PLT.
+* Mã lệnh tại đây thực hiện:
+    * `pushq *GOT[1]`: Đẩy địa chỉ của link_map vào ngăn xếp (stack).
+    * `jmpq *GOT[2]`: Nhảy đến trình giải quyết địa chỉ động (`_dl_runtime_resolve`).
+
+**Mục đích**: Tìm kiếm và cập nhật địa chỉ thực của hàm vào bảng GOT khi hàm đó được gọi lần đầu tiên.
+
+**PLT[n]: Các Function Stubs (Cho từng hàm cụ thể)**
+* Mỗi hàm thư viện (như puts, printf, exit) sẽ có một ô PLT riêng.
+* Cấu trúc một ô PLT điển hình (ví dụ puts@plt tại địa chỉ 4005b0):
+
+    * `jmpq *GOT[3]`: Nhảy trực tiếp đến địa chỉ được lưu trong bảng GOT tương ứng.
+    * `pushq $0x0`: Nếu là lần đầu gọi (chưa có địa chỉ trong GOT), nó sẽ đẩy chỉ số định danh của hàm (Relocation offset) vào ngăn xếp.
+    * `jmpq 4005a0`: Nhảy ngược về PLT[0] để thực hiện tìm địa chỉ thực tế.
+
 ### B. Bảng GOT (Global Offset Table)
+
 *   **Bản chất:** Là một phân vùng chứa **Dữ liệu (Data)**. Nó là một mảng các con trỏ (Pointers) 8-byte trên x64.
-*   **Phân loại nhỏ (Rất quan trọng trong 0-day):**
+*   **Phân loại nhỏ:**
     *   `.got`: Chứa địa chỉ của các biến toàn cục (Global Variables).
     *   `.got.plt`: Chứa địa chỉ thực của các **Hàm** ngoại lai (Function Pointers). *(Trong giới Pwn, khi nói GOT Overwrite, 99% ta đang nói đến `.got.plt`)*.
 *   **Quyền truy cập:** Vì địa chỉ thực chỉ được biết *sau khi* chương trình đã chạy, vùng nhớ `.got.plt` này **bắt buộc phải có quyền Ghi (Writable)** mặc định.
+
+*Hình minh họa cho GOT*
+<img width="596" height="416" alt="image" src="https://github.com/user-attachments/assets/97f3defb-f970-4eaf-89f1-37607ba54be7" />
+
+Bảng GOT được chia thành hai nhóm chính:
+
+* Các mục quản trị hệ thống (System Entries):
+
+    * `GOT[0]`: addr of `.dynamic`: Chứa địa chỉ của phần .dynamic, nơi lưu trữ thông tin cần thiết cho trình liên kết động (dynamic linker).
+    * `GOT[1]`: addr of `reloc entries`: Chứa địa chỉ của cấu trúc dữ liệu mô tả các mục cần được định vị lại (relocation) trong chương trình.
+    * `GOT[2]`: addr of dynamic linker: Đây là địa chỉ của hàm giải quyết ký hiệu động (`_dl_runtime_resolve`). Khi một hàm được gọi lần đầu, `PLT[0]` sẽ nhảy tới địa chỉ này để bắt đầu tìm kiếm.
+
+* Các mục chứa địa chỉ hàm (Function Entries):
+    * `GOT[3]` (Dành cho `puts`): Đang chứa giá trị 0x4005b6. Lưu ý rằng địa chỉ này trỏ ngược lại lệnh ngay sau lệnh nhảy trong PLT của hàm puts (xem lại ảnh minh họa của PLT).
+    * `GOT[4]` (Dành cho `printf`): Chứa 0x4005c6, trỏ về phần code tương ứng trong PLT của hàm printf.
+    * `GOT[5]` (Dành cho `exit`): Chứa 0x4005d6, trỏ về phần code tương ứng trong PLT của hàm exit.
 
 ---
 
@@ -222,7 +270,6 @@ Hãy soi mã máy x64 khi chương trình của bạn gọi `puts("hello hackers
 Khi `main` gọi `puts`, lệnh Assembly thực tế là `call puts@plt`.
 
 <img width="1204" height="629" alt="image" src="https://github.com/user-attachments/assets/bbd760ed-45e2-4b3c-bd2c-afdffa765ff8" />
-
 
 ```assembly
 ; Bên trong vùng nhớ .plt (Quyền: Thực thi)
