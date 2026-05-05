@@ -194,6 +194,10 @@ Thay vào đó, Linux dùng **Liên kết động (Dynamic Linking)**. Các chư
 
 Trong không gian bộ nhớ của một tiến trình (Process Memory), hệ thống dành ra các phân vùng (sections) đặc biệt cho tác vụ này.
 
+Dưới đây là cấu trúc của file ELF
+
+<img width="680" height="1135" alt="image" src="https://github.com/user-attachments/assets/a5edacfa-de32-4c51-9a51-63389f46c166" />
+
 ### A. Bảng PLT (Procedure Linkage Table)
 *   **Bản chất:** Là một phân vùng chứa **Mã lệnh (Code)**. Nó nằm trong vùng nhớ `.plt` và có quyền **Thực thi (Executable)**.
 *   **Chức năng:** Đóng vai trò là các "Trampoline" (Bàn đạp). File thực thi sẽ không gọi thẳng vào `libc`, mà gọi vào các đoạn code nhỏ trong PLT.
