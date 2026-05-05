@@ -687,6 +687,7 @@ macro `st_info`:
 #define ELF64_ST_BIND(val)		ELF32_ST_BIND (val)
 #define ELF64_ST_TYPE(val)		ELF32_ST_TYPE (val)
 #define ELF64_ST_INFO(bind, type)	ELF32_ST_INFO ((bind), (type))```
+```
 
 định nghĩa `st_bind`:
 
