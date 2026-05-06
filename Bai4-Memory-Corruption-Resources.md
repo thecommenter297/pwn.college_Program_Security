@@ -334,11 +334,11 @@ Kiến trúc Lazy Binding phơi bày một điểm yếu chí mạng: Bảng `.g
 Chỉ cần kẻ tấn công sở hữu một **Arbitrary Write Primitive** (Lỗi ghi bộ nhớ tùy ý tại một địa chỉ bất kỳ, thường sinh ra từ Format String `%n`, OOB Write tĩnh, hoặc Use-After-Free), chúng sẽ biến GOT thành bàn đạp để Hijack luồng điều khiển.
 
 #### Kịch bản khai thác kinh điển:
-Kẻ tấn công nhận thấy chương trình có gọi hàm `exit()` ở cuối cùng.
-1. **Dùng Arbitrary Write:** Kẻ tấn công ghi đè giá trị tại địa chỉ `exit@got.plt`.
-2. **Nội dung ghi đè:** Thay vì để nó chứa địa chỉ của hàm `exit` (hoặc địa chỉ trỏ về PLT), kẻ tấn công ghi đè bằng địa chỉ của hàm **`system`** (hoặc địa chỉ của một đoạn ROP chain/Shellcode).
-3. **Triggers (Kích hoạt):** Khi chương trình chạy đến cuối và gọi lệnh `exit()`, CPU làm đúng bổn phận: Nó tra cứu `exit@got.plt`, thấy địa chỉ của `system`, và nhảy thẳng vào `system`. 
-4. Nếu kẻ tấn công khéo léo chuẩn bị sẵn thanh ghi `RDI` trỏ vào chuỗi `"/bin/sh"`, hàm `system("/bin/sh")` sẽ được gọi thay vì `exit()`.
+Kẻ tấn công nhận thấy chương trình có gọi hàm `puts()`.
+1. **Dùng Arbitrary Write:** Kẻ tấn công ghi đè giá trị tại địa chỉ `puts@got.plt`.
+2. **Nội dung ghi đè:** Thay vì để nó chứa địa chỉ của hàm `puts` (hoặc địa chỉ trỏ về PLT), kẻ tấn công ghi đè bằng địa chỉ của hàm **`system`** (hoặc địa chỉ của một đoạn ROP chain/Shellcode).
+3. **Triggers (Kích hoạt):** Khi chương trình chạy đến cuối và gọi lệnh `puts()`, CPU làm đúng bổn phận: Nó tra cứu `puts@got.plt`, thấy địa chỉ của `system`, và nhảy thẳng vào `system`. 
+4. Nếu kẻ tấn công khéo léo chuẩn bị sẵn thanh ghi `RDI` trỏ vào chuỗi `"/bin/sh"`, hàm `system("/bin/sh")` sẽ được gọi thay vì `puts()`.
 
 ### Minh họa Exploit giả mã (Python / Pwntools)
 ```python
