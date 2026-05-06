@@ -264,7 +264,7 @@ Bảng GOT được chia thành hai nhóm chính:
 
 ---
 
-### 3. CƠ CHẾ LAZY BINDING: ĐIỆU NHẢY CỦA POINTERS (Phân tích Assembly x64)
+### 3. CƠ CHẾ LAZY BINDING (Phân tích Assembly x64)
 
 Để tối ưu tốc độ khởi động, Linux áp dụng **Lazy Binding (Liên kết trễ)**: Hệ thống sẽ *không* đi tìm địa chỉ của toàn bộ hàng ngàn hàm trong `libc` ngay từ đầu. Hàm nào được gọi thì mới đi tìm hàm đó.
 
