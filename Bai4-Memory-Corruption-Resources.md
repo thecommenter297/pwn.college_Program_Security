@@ -60,7 +60,7 @@ user1.id_list[index] = new_id;
 Những lỗ hổng này rất tinh vi, biến một code nhìn bề ngoài an toàn thành thảm họa.
 
 #### A. Signedness Bug (Lỗi nhầm lẫn Dấu)
-Xảy ra khi dùng số có dấu (`int`) để kiểm tra biên, nhưng lại dùng làm số không dấu (`size_t`) khi thao tác.
+Xảy ra khi dùng biến kiểu số có dấu (`int`) để kiểm tra biên, nhưng lại dùng chính biến đó với kiểu số không dấu (`size_t`) khi thao tác.
 ```c
 int size; // Số có dấu (32-bit)
 
@@ -71,7 +71,7 @@ if (size > 32) return; // Kẻ tấn công nhập -1 để lách điều kiện 
 read(0, buffer, size); // read nhận size_t. -1 bị ép kiểu thành 0xffffffffffffffff
 ```
 
-Mấu chốt của vấn đề là biến `size` được khai báo như kiểu `int`, nhưng hàm `read()` mong đợi kiểu `size_t` - số không dấu. Vậy, khi hàm `read()` sử dụng biến `size` sẽ ép nó về kiểu số không dấu (`0xfffff...`) theo quy tắc **Số bù hai (Two's Compliment)**
+Mấu chốt của vấn đề là biến `size` được khai báo như kiểu `int`, nhưng hàm `read()` mong đợi kiểu `size_t` - số không dấu. Vậy, khi hàm `read()` sử dụng biến `size` sẽ ép nó về kiểu số không dấu (`0xfffff...`) theo quy tắc **Số bù hai (Two's Complement)**
 
 > Để biết cụ thể một hàm mong đợi kiểu dữ liệu gì, hãy google bằng cách gõ `man + <tên hàm>`
 
