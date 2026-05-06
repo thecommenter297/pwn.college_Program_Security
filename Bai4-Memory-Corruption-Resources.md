@@ -277,15 +277,15 @@ Khi `main` gọi `puts`, lệnh Assembly thực tế là `call puts@plt`.
 
 <br>
 
-* Tại địa chỉ `4004d3` trong Code segment, chương trình thực hiện lệnh `callq 4005b0`. Địa chỉ `4005b0` chính là điểm bắt đầu của entry `puts@plt` trong bảng PLT.
+* **(1)** Tại địa chỉ `4004d3` trong Code segment, chương trình thực hiện lệnh `callq 4005b0`. Địa chỉ `4005b0` chính là điểm bắt đầu của entry `puts@plt` trong bảng PLT.
 
 $\rightarrow$ Hành động: Luồng thực thi rời khỏi hàm main và nhảy vào bảng PLT.
 
-* Ngay khi vào puts@plt tại địa chỉ `4005b0`, lệnh đầu tiên là `jmpq *GOT[3]`. Chương trình sẽ nhìn vào ô GOT[3] trong bảng Global Offset Table để lấy địa chỉ đích.
+* **(2)** Ngay khi vào puts@plt tại địa chỉ `4005b0`, lệnh đầu tiên là `jmpq *GOT[3]`. Chương trình sẽ nhìn vào ô GOT[3] trong bảng Global Offset Table để lấy địa chỉ đích.
 
 $\rightarrow$ **Điểm mấu chốt**: Vì đây là lần đầu tiên, ô GOT[3] không chứa địa chỉ của hàm `puts` trong libc. Thay vào đó, nó đang chứa giá trị `0x4005b6` trỏ ngược lại lệnh `push 0x0` trong PLT.
 
-* Do GOT[3] chứa địa chỉ `0x4005b6`, luồng thực thi trỏ ngược lại bảng PLT. Địa chỉ `0x4005b6` trỏ đến dòng lệnh `push 0x0`. Tại đây, chương trình thực hiện:
+* **(3)** Do GOT[3] chứa địa chỉ `0x4005b6`, luồng thực thi trỏ ngược lại bảng PLT. Địa chỉ `0x4005b6` trỏ đến dòng lệnh `push 0x0`. Tại đây, chương trình thực hiện:
     * `pushq $0x0`: Đẩy mã định danh (Reloc offset) của hàm puts vào stack để trình liên kết biết cần tìm hàm nào. Trong phạm 1 file ELF đơn lẻ, mỗi hàm có một mã định danh duy nhất.
     * `jmpq 4005a0`: Nhảy về PLT[0] (Common Resolver) để bắt đầu quy trình giải quyết địa chỉ thực tế thông qua `_dl_runtime_resolve`.
 
