@@ -246,14 +246,15 @@ Bảng PLT được chia thành các phần (entries), mỗi phần có một nh
 *   **Quyền truy cập:** Vì địa chỉ thực chỉ được biết *sau khi* chương trình đã chạy, vùng nhớ `.got.plt` này **bắt buộc phải có quyền Ghi (Writable)** mặc định.
 
 *Hình minh họa cho GOT*
-<img width="596" height="416" alt="image" src="https://github.com/user-attachments/assets/97f3defb-f970-4eaf-89f1-37607ba54be7" />
+<img width="599" height="410" alt="image" src="https://github.com/user-attachments/assets/9434164f-0c82-41e8-b59e-58a055005f46" />
+
 
 Bảng GOT được chia thành hai nhóm chính:
 
 * Các mục quản trị hệ thống (System Entries):
 
     * `GOT[0]`: addr of `.dynamic`: Chứa địa chỉ của phần .dynamic, nơi lưu trữ thông tin cần thiết cho trình liên kết động (dynamic linker).
-    * `GOT[1]`: addr of `reloc entries`: Chứa địa chỉ của cấu trúc dữ liệu mô tả các mục cần được định vị lại (relocation) trong chương trình.
+    * `GOT[1]`: addr of `link_map`: Đây là con trỏ dẫn đến cấu trúc dữ liệu mô tả danh sách các thư viện đã được nạp vào bộ nhớ.
     * `GOT[2]`: addr of dynamic linker: Đây là địa chỉ của hàm giải quyết ký hiệu động (`_dl_runtime_resolve`). Khi một hàm được gọi lần đầu, `PLT[0]` sẽ nhảy tới địa chỉ này để bắt đầu tìm kiếm.
 
 * Các mục chứa địa chỉ hàm (Function Entries):
@@ -267,58 +268,48 @@ Bảng GOT được chia thành hai nhóm chính:
 
 Để tối ưu tốc độ khởi động, Linux áp dụng **Lazy Binding (Liên kết trễ)**: Hệ thống sẽ *không* đi tìm địa chỉ của toàn bộ hàng ngàn hàm trong `libc` ngay từ đầu. Hàm nào được gọi thì mới đi tìm hàm đó.
 
-Hãy soi mã máy x64 khi chương trình của bạn gọi `puts("hello hackers");`. Dưới đây là 3 trạng thái cần chú ý:
+Hãy soi mã máy x64 khi chương trình của bạn gọi `puts();`. Dưới đây là 3 trạng thái cần chú ý:
 
 #### Trạng thái 1: Lần gọi đầu tiên (Pre-Resolution)
 Khi `main` gọi `puts`, lệnh Assembly thực tế là `call puts@plt`.
 
-<img width="1204" height="629" alt="image" src="https://github.com/user-attachments/assets/bbd760ed-45e2-4b3c-bd2c-afdffa765ff8" />
+<img width="1891" height="670" alt="image" src="https://github.com/user-attachments/assets/44556262-e3cb-441f-90b8-5e9e04737a3d" />
 
-```assembly
-; Bên trong vùng nhớ .plt (Quyền: Thực thi)
-0x555555555030 <puts@plt>:
-  jmp QWORD PTR[rip+0x2fca]  ; 1. Đọc một địa chỉ từ bảng GOT và nhảy đến đó
-  push 0x0                    ; 2. Đẩy "ID" (reloc_index) của hàm puts lên Stack
-  jmp 0x555555555020          ; 3. Nhảy đến PLT[0] (Khu vực của Phù thủy)
-```
+<br>
 
-<details>
-    <summary>Giải thích vài điều</summary>
+* Tại địa chỉ `4004d3` trong Code segment, chương trình thực hiện lệnh `callq 4005b0`. Địa chỉ `4005b0` chính là điểm bắt đầu của entry `puts@plt` trong bảng PLT.
 
----
+$\rightarrow$ Hành động: Luồng thực thi rời khỏi hàm main và nhảy vào bảng PLT.
 
-* Trong file ELF hiện đại, có hai phân đoạn: .got (dành cho biến toàn cục) và .got.plt (dành cho địa chỉ hàm). Khi nói về PLT, chúng ta đang nói đến .got.plt.
-<img width="869" height="654" alt="image" src="https://github.com/user-attachments/assets/b9293c5a-fc17-4946-9d7e-0bcbec104a4e" />
+* Ngay khi vào puts@plt tại địa chỉ `4005b0`, lệnh đầu tiên là `jmpq *GOT[3]`. Chương trình sẽ nhìn vào ô GOT[3] trong bảng Global Offset Table để lấy địa chỉ đích.
 
-* Compiler và Linker khi tạo ra file thực thi đã tính toán trước khoảng cách (**offset**) cố định giữa phân đoạn mã lệnh (`.plt`) và phân đoạn dữ liệu (`.got.plt`). Lệnh `jmp [rip + offset]` là một lệnh "Indirect Jump" dùng để nhảy tới địa chỉ trong phân đoạn `.got.plt` mà `rip+offset` trỏ tới.
+$\rightarrow$ **Điểm mấu chốt**: Vì đây là lần đầu tiên, ô GOT[3] không chứa địa chỉ của hàm `puts` trong libc. Thay vào đó, nó đang chứa giá trị `0x4005b6` trỏ ngược lại lệnh `push 0x0` trong PLT.
 
-* File thực thi của bạn có một danh sách các hàm cần tìm địa chỉ (như `puts`, `printf`, `scanf`). Danh sách này nằm trong một bảng gọi là Relocation Table (cụ thể là `.rela.plt`). Vậy, `reloc_index` chính là số thứ tự (hoặc offset) của dòng đó trong bảng Relocation.
+* Do GOT[3] chứa địa chỉ `0x4005b6`, luồng thực thi trỏ ngược lại bảng PLT. Địa chỉ `0x4005b6` trỏ đến dòng lệnh `push 0x0`. Tại đây, chương trình thực hiện:
+    * `pushq $0x0`: Đẩy mã định danh (Reloc offset) của hàm puts vào stack để trình liên kết biết cần tìm hàm nào. Trong phạm 1 file ELF đơn lẻ, mỗi hàm có một mã định danh duy nhất.
+    * `jmpq 4005a0`: Nhảy về PLT[0] (Common Resolver) để bắt đầu quy trình giải quyết địa chỉ thực tế thông qua `_dl_runtime_resolve`.
 
----
+**Quy trình resolve (giải quyết) địa chỉ của Dynamic Linker**
+
+<img width="1907" height="624" alt="Screenshot 2026-05-06 141225" src="https://github.com/user-attachments/assets/bd42c1a3-e7e1-4cb2-b19b-907e2f918c1c" />
+
+* **(4)** Tại địa chỉ 4005a0 (PLT[0]), chương trình thực hiện:
+    * `pushq *GOT[1]`: Đẩy địa chỉ của link_map lên stack. Đây là "bản đồ" giúp trình liên kết biết danh sách các thư viện đang hiện có.
+    * `jmpq *GOT[2]`: Nhảy đến địa chỉ lưu trong GOT[2].
+$\rightarrow$ PLT[0] đóng vai trò như một bộ nạp dữ liệu chung, gom đủ thông tin về thư viện (từ GOT[1]) và định danh hàm (đã được push từ bước 3) để chuyển giao cho trình liên kết.
+
+* **(5)** và **(6)** Lệnh `jmpq *GOT[2]` dẫn luồng thực thi tìm đến địa chỉ của trình liên kết động. Lúc này, hàm `_dl_runtime_resolve` bên trong ld-linux-x86-64.so.2 sẽ tiếp quản.
+    * Hành động của Linker:
+        * Đọc thông tin `link_map` và `reloc_index` (mã định danh hàm) từ stack.
+        * Tra cứu trong thư viện `libc.so.6` để tìm vị trí thực sự của hàm puts trong bộ nhớ RAM.
+* **(7)**: Cập nhật địa chỉ thật của hàm vào GOT.
+    * Sau khi tìm thấy địa chỉ thực (ví dụ: `0x7ffff7a61230`), trình liên kết động thực hiện một bước cực kỳ quan trọng (mũi tên cam số 7): Ghi đè địa chỉ thực này vào ô GOT[3].
     
-</details>
-
-Ở dòng (1), CPU nhìn vào vùng `.got.plt` để xem hàm `puts` nằm ở đâu.
-Nhưng vì đây là lần gọi đầu tiên, bảng GOT chưa chứa địa chỉ thật. Trình biên dịch đã cố tình gài sẵn vào GOT một địa chỉ "ảo", trỏ **ngược lại** chính dòng lệnh (2) bên trong PLT.
-
-```assembly
-; Bên trong vùng nhớ .got.plt (Quyền: Đọc/Ghi)
-0x555555558018 <puts@got.plt>: 0x555555555036  (Chính là địa chỉ của lệnh push 0x0)
-```
-
-Kết quả: Luồng thực thi bị dội ngược lại, thực hiện lệnh `push 0x0` (lưu ID của hàm `puts` để hệ thống biết đang cần tìm hàm nào), rồi nhảy thẳng vào `PLT[0]`.
-
-<img width="1239" height="664" alt="image" src="https://github.com/user-attachments/assets/1f34a71b-e1e4-4d43-8f8c-6d6b1fc0d7d5" />
-
-
-#### Trạng thái 2: "Phù thủy" giải quyết (The Resolver)
-`PLT[0]` chứa một đoạn code đặc biệt gọi vào hàm `_dl_runtime_resolve` của hệ điều hành (Dynamic Linker). 
-"Phù thủy" này sẽ thực hiện các việc sau:
-1. Dựa vào `ID = 0x0` trên Stack, nó tra cứu bảng Symbol để biết phần mềm đang đòi hàm `puts`.
-2. Nó lùng sục trong không gian bộ nhớ của `libc.so` xem `puts` đang nằm ở địa chỉ vật lý nào.
-3. **[HÀNH ĐỘNG CỐT LÕI]:** Nó lấy địa chỉ thật (ví dụ: `0x7ffff7a91da0`) và **ghi đè** vào ô `puts@got.plt`.
-4. Nhảy đến hàm `puts` thật và in ra chữ "Hello".
-
+    $\rightarrow$ Mục đích: Từ đó về sau, GOT[3] sẽ không trỏ ngược về PLT nữa mà trỏ thẳng tới libc.
+<liệu có nên đặt một cái ảnh cho thấy bảng GOT đã cập nhật ở đây không? hay để chỗ khác?>
+* **(8)**: Thực thi hàm lần đầu tiên
+    * Sau khi đã cập nhật GOT, trình liên kết không bắt chương trình phải gọi lại từ đầu. Nó thực hiện bước nhảy cuối cùng đưa luồng thực thi đến thẳng địa chỉ thực của hàm `puts` trong thư viện chia sẻ.
+    * Hàm `puts` thực thi mã lệnh thực tế của nó và trả kết quả về cho chương trình.
 #### Trạng thái 3: Các lần gọi sau (Post-Resolution)
 Những lần tiếp theo chương trình gọi `puts("Hi");`, CPU lại chui vào `puts@plt` và chạy lệnh dòng (1):
 
