@@ -100,6 +100,7 @@ user1.id_list[index] = new_id;
         * Lấy số dương tương ứng.
         * Đảo ngược toàn bộ bit (0 thành 1 và ngược lại).
         * Cộng thêm 1 để ra kết quả cuối cùng.
+        
 $\rightarrow$ Cách 2 thường được dùng để tính nhanh trong thực tế, trong khi Cách 1 giúp hiểu rõ cấu trúc toán học của hệ thống.
 
 **Bản chất của việc ép kiểu (Casting) giữa Signed và Unsigned**:
