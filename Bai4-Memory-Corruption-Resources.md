@@ -63,6 +63,8 @@ user1.id_list[index] = new_id;
 
 **BẢNG HỆ THỐNG GIỚI HẠN KIỂU DỮ LIỆU  (DẠNG LŨY THỪA & GIÁ TRỊ THỰC)**
 
+> Bảng được làm với mục đích tra cứu, không phải với mục đích học thuộc.
+
 | Kiểu dữ liệu đầy đủ | Bits | Bytes | Giá trị Nhỏ nhất (Minimum) | Giá trị Lớn nhất (Maximum) |
 | :--- | :---: | :---: | :--- | :--- |
 | **signed char** | 8 | 1 | $-2^{7}$ ($-128$) | $2^{7}-1$ ($127$) |
@@ -88,8 +90,85 @@ user1.id_list[index] = new_id;
 => Chính vì sự lộn xộn này mà kiểu **`int64_t`** hoặc **`long long`** được khuyên dùng để chắc chắn có 8 bytes.
 
 ---
- 
-</details>
+
+**Số bù hai Two's Complement**:
+* Có 2 cách để xác định giá trị số âm từ chuỗi bit nhị phân:   
+    * **Cách 1:** Trọng số âm
+        * Coi bit ngoài cùng bên trái mang giá trị âm (ví dụ hệ 4-bit là -8).
+        * Cộng giá trị âm này với tổng các bit dương còn lại.
+    * **Cách 2**: Lật bit + 1 (Thực hành)
+        * Lấy số dương tương ứng.
+        * Đảo ngược toàn bộ bit (0 thành 1 và ngược lại).
+        * Cộng thêm 1 để ra kết quả cuối cùng.
+$\rightarrow$ Cách 2 thường được dùng để tính nhanh trong thực tế, trong khi Cách 1 giúp hiểu rõ cấu trúc toán học của hệ thống.
+
+**Bản chất của việc ép kiểu (Casting) giữa Signed và Unsigned**:
+* Khi bạn ép kiểu giữa `int` và `unsigned int` (cùng kích thước bit), máy tính không hề thay đổi bất kỳ bit nào trong RAM.
+* Nó đơn thuần chỉ là việc thay đổi "cách giải thích" chuỗi bit đó.
+* Ví dụ: Chuỗi 16-bit `0xCFC7` nếu ở kiểu short thì là `-12,345` nhưng nếu là kiểu `unsigned short` thì nó là `53,191`.
+
+* **Ví dụ: Ép kiểu từ Dương (Unsigned) sang Âm (Signed)**:
+
+  Lấy ví dụ minh họa hệ 4-bit. Giả sử trong bộ nhớ có chuỗi bit: `1 0 1 1`
+    * **Cách đọc Unsigned (Không dấu):**
+      * Bit đầu tiên mang giá trị `+8`.
+      * Tổng = + $1 \cdot {2}^{3}$ + $0 \cdot 2^2$ + $1 \cdot 2^1$ + $1 \cdot 2^1$ = **11**
+    * **Cách đọc Signed (Có dấu - Số bù hai):**
+      * Bit đầu tiên mang giá trị `-8`.
+      * Tổng = $-1 \cdot 2^3 + 0 \cdot 2^2 + 1 \cdot 2^1 + 1 \cdot 2^0$ = **-5**
+
+=> **Kết luận:** Khi bạn ép kiểu từ số dương `11` về số có dấu, máy tính chỉ đơn giản là "lật" trọng số của bit đầu tiên từ `+` thành `-`. Kết quả là số dương sẽ thành số âm.
+
+---
+
+**Sự khác biệt giữa Signed và Unsigned trong C (Hơn cả ép kiểu)**
+
+**1. Hằng số (Constants) mặc định là Có dấu**
+
+Trong code C, khi bạn viết một con số như `12345` hay `0x1A2B`, máy tính mặc định coi nó là kiểu **Signed (có dấu)**. 
+* **Ví dụ**: Với số thập phân (ví dụ `123`): Nó sẽ thử nhét vào kiểu `int` -> `long int` -> `long long int`. Tất cả đều là **Signed** (có dấu).
+* Chỉ khi nào con số quá lớn không thể nhét vừa bất kỳ kiểu có dấu nào, nó mới được coi là `unsigned`.
+* Nếu bạn muốn máy tính coi nó là số không dấu ngay từ đầu, bạn phải thêm hậu tố `U` hoặc `u` (ví dụ: `12345U`). Chỉ cần thiếu một chữ `U`, một phép tính tưởng chừng vô hại có thể bị sai lệch hoàn toàn do máy tính hiểu nhầm ý định của bạn.
+
+**2. Ép kiểu "Lặng lẽ" (Implicit Casting)**
+
+Không cần bạn viết `(unsigned)x`, việc ép kiểu vẫn xảy ra khi:
+* **Gán giá trị:** Bạn gán một biến `int` vào một biến `unsigned` (hoặc ngược lại). 
+* **Lưu ý:** Máy tính vẫn giữ nguyên chuỗi bit, nó chỉ đổi cách đọc bit MSB khi lưu vào biến mới.
+
+**3. Cú lừa từ hàm `printf`**
+
+Hàm `printf` thực chất là một "kẻ mù kiểu dữ liệu". Nó không quan tâm biến bạn truyền vào là `int` hay `unsigned`. Nó chỉ nhìn vào **Định dạng (`%d`, `%u`, `%x`)** bạn yêu cầu:
+* `%d`: Ép máy tính đọc chuỗi bit đó theo kiểu Có dấu (Số bù hai).
+* `%u`: Ép máy tính đọc chuỗi bit đó theo kiểu Không dấu.
+* **Ví dụ:** Bạn có biến `int x = -1` (Hệ 32bit).
+    * `printf("%u", x)` -> Ra số cực lớn `4,294,967,295`.
+    * `printf("%d", x)` -> Ra số `-1`.
+
+$\rightarrow$ **Bài học:** Đừng tin vào những gì `printf` in ra nếu bạn dùng sai định dạng. Chuỗi bit bên dưới mới là sự thật duy nhất.
+
+<br>
+
+**4. Sự trộn lẫn giữa Signed và Unsigned trong một phép tính (Versus)**
+
+Khi bạn thực hiện một phép tính (cộng, trừ, so sánh) mà một bên là **Signed**, một bên là **Unsigned**, ngôn ngữ C sẽ áp dụng quy tắc:
+
+**"Kẻ có dấu (Signed) phải đầu hàng và tự biến mình thành Không dấu (Unsigned)"**
+
+* **Ví dụ kinh điển:** So sánh `-1 < 0U` (32bit)
+    1. `-1` là Signed. `0U` là Unsigned.
+    2. C tự động ép kiểu `-1` thành Unsigned.
+    3. Theo quy tắc bit, `-1` (Unsigned) là `4,294,967,295`.
+    4. Phép so sánh trở thành: `4,294,967,295 < 0`.
+    5. Kết quả: **SAI (False)**.
+
+**Hệ quả:** 
+
+Đây là lỗ hổng logic cực kỳ phổ biến. Lập trình viên cứ nghĩ `-1` nhỏ hơn `0`, nhưng vì họ vô tình dùng một biến Unsigned trong phép so sánh, con số `-1` bỗng hóa thành một gã khổng lồ, khiến mọi dòng check `if` đều bị bypass.
+
+$\rightarrow$ Như vậy chúng ta biết rằng: C cực kỳ thiên vị **Unsigned**. Trong mọi cuộc đối đầu (Versus) giữa số có dấu và số không dấu, số có dấu sẽ luôn bị ép thành số không dấu. 
+
+---
 
 Những lỗ hổng này rất tinh vi, biến một code nhìn bề ngoài an toàn thành thảm họa.
 
