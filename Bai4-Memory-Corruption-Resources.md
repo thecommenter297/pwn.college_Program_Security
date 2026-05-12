@@ -1,7 +1,5 @@
 # Memory Corruption Resources: Từ Bản Chất Đến Nghệ Thuật Khai Thác
 
----
-
 ## Phần 1: Lỗi Bộ Nhớ - Nền Tảng Của Mọi Cuộc Tấn Công
 
 > *Đoạn lịch sử này giúp hiểu tại sao C/C++ lại "nguy hiểm", bạn có thể lướt qua luôn cũng được.*
